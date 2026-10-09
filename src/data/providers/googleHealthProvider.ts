@@ -153,12 +153,15 @@ export class GoogleHealthProvider implements HealthDataProvider {
         trainingGoal: 'build',
         units: 'metric',
       },
-      devices: (devices?.pairedDevices ?? []).map((d: any) => ({
-        id: d.name,
-        name: d.displayName ?? 'Fitbit device',
-        battery: n(d.batteryLevel),
-        lastSync: d.lastSyncTime ?? null,
-      })),
+      // trackers first (a Fitbit scale can also be paired)
+      devices: [...(devices?.pairedDevices ?? [])]
+        .sort((a: any, b: any) => (a.deviceType === 'SCALE' ? 1 : 0) - (b.deviceType === 'SCALE' ? 1 : 0))
+        .map((d: any) => ({
+          id: d.name,
+          name: d.deviceVersion ?? d.displayName ?? 'Fitbit device',
+          battery: n(d.batteryLevel) ?? ({ HIGH: 90, MEDIUM: 50, LOW: 15, EMPTY: 0 } as Record<string, number>)[String(d.batteryStatus ?? '').toUpperCase()] ?? null,
+          lastSync: d.lastSyncTime ?? null,
+        })),
       today,
       days: mergeDaily(dates, series),
       sleep,

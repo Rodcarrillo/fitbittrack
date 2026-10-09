@@ -1168,3 +1168,5 @@ html, body { overscroll-behavior-y: none; }
 @media (min-width: 1024px) { .topbar { padding-top: 14px; min-height: 0; } .ptr { display: none; } }
 .topbar { background: color-mix(in srgb, var(--bg) 94%, transparent); }
 .subnav { background: var(--bg); box-shadow: 0 8px 12px -8px var(--bg); }
+/* solid top bar (no frosted blur); fills the status-bar / Dynamic Island area too */
+.topbar { background: var(--bg); backdrop-filter: none; -webkit-backdrop-filter: none; border-bottom: 1px solid var(--line); }

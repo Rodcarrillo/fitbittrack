@@ -99,7 +99,7 @@ function Shell() {
             <BandIcon size={22} />
             <span>
               {device.name}
-              <span className="fine">{device.battery}% battery</span>
+              <span className="fine">{device.battery != null ? `${device.battery}% battery` : 'Battery —'}</span>
             </span>
           </div>
         )}
@@ -114,9 +114,9 @@ function Shell() {
                 Sample
               </button>
             )}
-            {device && (
-              <span className="battery" title={`${device.name} battery`}>
-                <span className="num">{device.battery}%</span>
+            {(device || (raw && !raw.source.isSample)) && (
+              <span className="battery" title={device ? `${device.name} battery` : 'Reconnect Google Health to see your band battery'}>
+                <span className="num">{device?.battery != null ? `${device.battery}%` : '—'}</span>
                 <BandIcon size={20} />
               </span>
             )}

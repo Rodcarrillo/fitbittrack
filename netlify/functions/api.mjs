@@ -28,6 +28,7 @@ const GOOGLE_SCOPES = [
   'https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly',
   'https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly',
   'https://www.googleapis.com/auth/googlehealth.profile.readonly',
+  'https://www.googleapis.com/auth/googlehealth.settings.readonly', // paired devices + battery
 ];
 const ALLOWED_TYPES = new Set([
   'sleep', 'exercise', 'steps', 'total-calories', 'weight', 'height',

@@ -46,6 +46,7 @@ Después: **Deploys → Trigger deploy → Deploy site** para que tome las clave
    - `.../auth/googlehealth.health_metrics_and_measurements.readonly`
    - `.../auth/googlehealth.activity_and_fitness.readonly`
    - `.../auth/googlehealth.profile.readonly`
+   - `.../auth/googlehealth.settings.readonly` (pulsera y batería)
 
    En **Usuarios de prueba** agrega tu cuenta de Google (la de tu Fitbit).
 4. **Credenciales → Crear credenciales → ID de cliente de OAuth → Aplicación web**.
