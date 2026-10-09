@@ -41,7 +41,9 @@ const SESSION_DAYS = 30;
 
 /* ---------------------------------------------------------------- helpers */
 // trimmed: a pasted value with a stray space/newline would otherwise break OAuth
-const env = (k) => String((typeof Netlify !== 'undefined' ? Netlify.env.get(k) : undefined) ?? process.env[k] ?? '').trim();
+const rawEnv = (k) => String((typeof Netlify !== 'undefined' ? Netlify.env.get(k) : undefined) ?? process.env[k] ?? '').trim();
+// tolerate a client ID pasted as a URL ("http://…googleusercontent.com/")
+const env = (k) => (k === 'GOOGLE_CLIENT_ID' ? rawEnv(k).replace(/^https?:\/\//i, '').replace(/\/+$/, '') : rawEnv(k));
 const keyFrom = (name) => crypto.createHash('sha256').update(env(name)).digest();
 
 function assertConfig() {
