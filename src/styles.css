@@ -676,13 +676,7 @@ body::before {
 
 /* ---- logo ---- */
 .logomark { display: inline-grid; place-items: center; flex: none; }
-.logomark--tile {
-  border-radius: 28%;
-  background: linear-gradient(160deg, #141b2b, #0b0f18);
-  border: 1px solid rgba(110, 138, 240, 0.22);
-  box-shadow: 0 0 0 1px rgba(36, 67, 214, 0.08), 0 6px 22px -6px var(--accent-glow);
-}
-.logomark__glow { filter: blur(2.2px); opacity: 0.95; }
+.logomark--tile { border-radius: 28%; }
 .wordmark { gap: 10px; }
 .wordmark__text { font-family: var(--font-num); font-weight: 600; font-size: 15px; letter-spacing: 0.26em; }
 .bandicon { display: inline-block; background: currentColor; -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-position: center; mask-position: center; }
@@ -691,23 +685,6 @@ body::before {
 .sample-chip { color: var(--accent-hi); border-color: rgba(110, 138, 240, 0.35); background: rgba(36, 67, 214, 0.08); }
 .sidebar__device .bandicon { color: var(--accent-hi); }
 
-/* ---- splash: F → heartbeat ---- */
-.splash {
-  position: fixed; inset: 0; z-index: 100;
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
-  background: radial-gradient(50% 40% at 50% 45%, rgba(36, 67, 214, 0.18), transparent 70%), var(--bg);
-  transition: opacity 0.4s ease, visibility 0.4s;
-}
-.splash--out { opacity: 0; visibility: hidden; }
-.splash__mark { width: 132px; height: 132px; display: grid; place-items: center; border-radius: 34px; background: linear-gradient(160deg, #121a2c, #090d15); border: 1px solid rgba(110, 138, 240, 0.2); box-shadow: 0 0 60px -10px var(--accent-glow); }
-.splash__line, .splash__glow { stroke-dasharray: 1; stroke-dashoffset: 1; animation: draw 0.62s cubic-bezier(0.65, 0, 0.35, 1) forwards; }
-.splash__glow { filter: blur(3px); }
-.splash--word .splash__mark { animation: glowPulse 0.7s ease; }
-@keyframes glowPulse { 50% { box-shadow: 0 0 90px -4px var(--accent-glow); transform: scale(1.03); } }
-.splash__word { font-family: var(--font-num); font-weight: 600; letter-spacing: 0.34em; font-size: 18px; opacity: 0; transform: translateY(6px); transition: opacity 0.45s ease, transform 0.45s var(--ease); }
-.splash__tag { font-size: 13px; color: var(--muted); opacity: 0; transition: opacity 0.45s ease 0.1s; }
-.splash--word .splash__word, .splash--out .splash__word { opacity: 1; transform: none; }
-.splash--word .splash__tag, .splash--out .splash__tag { opacity: 1; }
 
 /* ---- accent glow on active nav ---- */
 .tabbar__item.is-active svg, .navitem.is-active svg { color: var(--accent-hi); filter: drop-shadow(0 0 7px var(--accent-glow)); }
@@ -1118,14 +1095,6 @@ button.prcard:hover { border-color: rgba(110, 138, 240, 0.35); }
 .age-scale__real { top: 27px; flex-direction: column; gap: 3px; }
 .age-scale__lo, .age-scale__hi { top: 42px; }
 
-/* ---------------- logo: soft sky blue (not neon) ---------------- */
-:root { --logo: #9fd4ff; --logo-glow: rgba(120, 190, 255, 0.55); }
-.logomark__glow { filter: blur(2.4px); opacity: 0.6; }
-.logomark--tile { border-color: rgba(159, 212, 255, 0.22); box-shadow: 0 0 0 1px rgba(120, 190, 255, 0.06), 0 6px 20px -8px rgba(120, 190, 255, 0.35); }
-.splash__glow { opacity: 0.65; }
-.splash__mark { border-color: rgba(159, 212, 255, 0.2); box-shadow: 0 0 56px -12px rgba(120, 190, 255, 0.45); }
-.splash { background: radial-gradient(50% 40% at 50% 45%, rgba(120, 190, 255, 0.12), transparent 70%), var(--bg); }
-@keyframes glowPulse { 50% { box-shadow: 0 0 80px -8px rgba(120, 190, 255, 0.5); transform: scale(1.03); } }
 
 /* ---------------- login ---------------- */
 .login { min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; padding: 32px 16px; position: relative; overflow: hidden; background: var(--bg); }
@@ -1157,7 +1126,7 @@ button.prcard:hover { border-color: rgba(110, 138, 240, 0.35); }
 .logomark--tile { background: #fff; border: 1px solid rgba(0, 0, 0, 0.08); box-shadow: 0 4px 14px -6px rgba(0, 0, 0, 0.45); }
 
 /* splash: F → dumbbell → heartbeat, pure white */
-.splash { background: #fff; gap: 0; transition: opacity 0.4s ease, visibility 0.4s; }
+.splash { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; background: #fff; transition: opacity 0.4s ease, visibility 0.4s; }
 .splash--out { opacity: 0; visibility: hidden; }
 .splash__svg { width: min(46vw, 220px); height: auto; overflow: visible; }
 .splash svg * { transform-box: fill-box; transform-origin: center; }

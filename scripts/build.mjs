@@ -37,13 +37,13 @@ mkdirSync('dist', { recursive: true });
 if (existsSync('public')) cpSync('public', 'dist', { recursive: true });
 const HEAD_META =
   '<meta name="description" content="FITBITRACK — your Fitbit data, reimagined: readiness, sleep, training load and a strength workout tracker.">' +
-  '<link rel="icon" href="/favicon.ico" sizes="48x48">' +
-  '<link rel="icon" href="/favicon.svg" type="image/svg+xml">' +
-  '<link rel="apple-touch-icon" href="/apple-touch-icon.png">' +
-  '<link rel="manifest" href="/manifest.webmanifest">' +
+  '<link rel="icon" href="/favicon.ico?v=3" sizes="48x48">' +
+  '<link rel="icon" href="/favicon.svg?v=3" type="image/svg+xml">' +
+  '<link rel="apple-touch-icon" href="/apple-touch-icon.png?v=3">' +
+  '<link rel="manifest" href="/manifest.webmanifest?v=3">' +
   '<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">' +
   '<meta name="apple-mobile-web-app-title" content="FITBITRACK"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">' +
-  '<meta property="og:title" content="FITBITRACK"><meta property="og:description" content="Your Fitbit data. Reimagined."><meta property="og:image" content="/icon-512.png">';
+  '<meta property="og:title" content="FITBITRACK"><meta property="og:description" content="Your Fitbit data. Reimagined."><meta property="og:image" content="/icon-512.png?v=3">';
 
 if (serve) {
   writeFileSync(
