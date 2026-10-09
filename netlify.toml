@@ -1,0 +1,17 @@
+# FITBITRACK on Netlify: the app (dist/) + a serverless API (netlify/functions/api.mjs)
+# that handles accounts, Google Health and Hevy. Data lives in Netlify Blobs.
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  VITE_DATA_PROVIDER = "google"   # use the real server (accounts, Google Health, Hevy)
+  NODE_VERSION = "20"
+
+[functions]
+  node_bundler = "esbuild"
+
+[[headers]]
+  for = "/manifest.webmanifest"
+  [headers.values]
+    Content-Type = "application/manifest+json"
