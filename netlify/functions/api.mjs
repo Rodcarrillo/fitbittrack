@@ -40,7 +40,8 @@ const MAX_BLOB = 3 * 1024 * 1024;
 const SESSION_DAYS = 30;
 
 /* ---------------------------------------------------------------- helpers */
-const env = (k) => (typeof Netlify !== 'undefined' ? Netlify.env.get(k) : undefined) ?? process.env[k] ?? '';
+// trimmed: a pasted value with a stray space/newline would otherwise break OAuth
+const env = (k) => String((typeof Netlify !== 'undefined' ? Netlify.env.get(k) : undefined) ?? process.env[k] ?? '').trim();
 const keyFrom = (name) => crypto.createHash('sha256').update(env(name)).digest();
 
 function assertConfig() {
@@ -179,6 +180,19 @@ async function route(req, context) {
   const url = new URL(req.url);
   const path = url.pathname.replace(/\/+$/, '');
   const method = req.method;
+
+  /* ---------- setup check (no secrets: the client ID is public, it appears in every Google sign-in URL) ---------- */
+  if (path === '/auth/check') {
+    const id = env('GOOGLE_CLIENT_ID');
+    const sec = env('GOOGLE_CLIENT_SECRET');
+    return json({
+      google_client_id: id || '(empty)',
+      client_id_looks_valid: /^[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com$/.test(id),
+      client_secret_set: sec.length > 0,
+      client_secret_looks_valid: sec.startsWith('GOCSPX-'),
+      redirect_uri_to_register_in_google: googleRedirect(req),
+    });
+  }
 
   /* ---------- accounts ---------- */
   if (path === '/auth/register' && method === 'POST') {
