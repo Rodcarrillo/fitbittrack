@@ -30,7 +30,7 @@ const GOOGLE_SCOPES = [
   'https://www.googleapis.com/auth/googlehealth.profile.readonly',
 ];
 const ALLOWED_TYPES = new Set([
-  'sleep', 'exercise', 'steps', 'total-calories', 'weight',
+  'sleep', 'exercise', 'steps', 'total-calories', 'weight', 'height',
   'daily-resting-heart-rate', 'daily-heart-rate-variability', 'daily-respiratory-rate',
   'daily-oxygen-saturation', 'daily-sleep-temperature-derivations', 'daily-vo2-max', 'daily-heart-rate-zones',
 ]);

@@ -141,7 +141,7 @@ export function matchExercise(title: string, defs: ExerciseDef[]): { id: string 
   const eq = equipmentFromTitle(title);
   const exact = defs.find((d) => norm(d.name) === n && (eq === 'other' || d.equipment === eq)) ?? defs.find((d) => norm(d.name) === n);
   if (exact) return { id: exact.id };
-  return { create: { name: title, muscle: 'core', equipment: eq, restSec: 90 } };
+  return { create: { name: title, muscle: guessMuscle(title), equipment: eq, restSec: 90 } };
 }
 
 export function hevyToWorkout(h: HevyWorkout, resolve: (title: string) => string, history: Workout[]): Workout {
@@ -189,4 +189,120 @@ export function workoutToHevy(w: Workout, defs: Map<string, ExerciseDef>, templa
     body: { workout: { title: w.name, description: w.notes ?? null, start_time: w.startedAt, end_time: w.endedAt, is_private: false, exercises } },
     skipped,
   };
+}
+
+
+/* ------------------------------------------------------------------ */
+/*  Free path (no Hevy Pro): Hevy → Settings → Export & Import Data →  */
+/*  Export Workouts gives a CSV. Parse it into HevyWorkout objects.    */
+/* ------------------------------------------------------------------ */
+
+const MUSCLE_WORDS: [RegExp, Muscle][] = [
+  [/calf|calves/i, 'calves'],
+  [/wrist|forearm|grip/i, 'forearms'],
+  [/curl(?!.*leg)|bicep|hammer|preacher/i, 'biceps'],
+  [/tricep|pushdown|skull|dip|overhead.*extension|kickback(?!.*glute)/i, 'triceps'],
+  [/glute|hip thrust|abduct|bridge|kickback/i, 'glutes'],
+  [/squat|leg|lunge|split|adduct|step up|deadlift|hyperextension|back extension/i, 'legs'],
+  [/bench|chest|fly|dragonfly|push ?up|pec/i, 'chest'],
+  [/row|pulldown|pull ?up|chin|lat |lats|shrug|face pull|pullover/i, 'back'],
+  [/shoulder|lateral raise|press|reverse fly|rear delt|upright/i, 'shoulders'],
+  [/crunch|plank|ab |abs|knee raise|leg raise|dead bug|rotation|twist|sit ?up/i, 'core'],
+];
+export function guessMuscle(title: string): Muscle {
+  for (const [re, m] of MUSCLE_WORDS) if (re.test(title)) return m;
+  return 'core';
+}
+
+/** RFC-4180-ish CSV parser (quotes, escaped quotes, commas and newlines inside quotes). */
+export function parseCsv(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = '';
+  let q = false;
+  const t = text.replace(/^\uFEFF/, '');
+  for (let i = 0; i < t.length; i++) {
+    const c = t[i];
+    if (q) {
+      if (c === '"') {
+        if (t[i + 1] === '"') {
+          cell += '"';
+          i++;
+        } else q = false;
+      } else cell += c;
+    } else if (c === '"') q = true;
+    else if (c === ',') {
+      row.push(cell);
+      cell = '';
+    } else if (c === '\n' || c === '\r') {
+      if (c === '\r' && t[i + 1] === '\n') i++;
+      row.push(cell);
+      cell = '';
+      if (row.some((x) => x !== '')) rows.push(row);
+      row = [];
+    } else cell += c;
+  }
+  row.push(cell);
+  if (row.some((x) => x !== '')) rows.push(row);
+  return rows;
+}
+
+const MONTHS: Record<string, number> = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+/** "28 Sep 2026, 17:14" (Hevy export, local time) → ISO. Falls back to Date parsing for other formats. */
+function hevyDate(s: string): string | null {
+  const m = s.trim().match(/^(\d{1,2})\s+([A-Za-z]{3})[a-z]*\.?\s+(\d{4}),?\s+(\d{1,2}):(\d{2})/);
+  if (m && MONTHS[m[2].toLowerCase()] != null) return new Date(+m[3], MONTHS[m[2].toLowerCase()], +m[1], +m[4], +m[5]).toISOString();
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+const numOrNull = (v: string | undefined) => {
+  if (v == null || v.trim() === '') return null;
+  const n = parseFloat(v.replace(',', '.'));
+  return Number.isFinite(n) ? n : null;
+};
+
+/** Hevy CSV export → workouts (ascending). Throws a readable Error if the file isn't a Hevy export. */
+export function parseHevyCsv(text: string): HevyWorkout[] {
+  const rows = parseCsv(text);
+  if (rows.length < 2) throw new Error('The file is empty.');
+  const head = rows[0].map((h) => h.trim().toLowerCase());
+  const col = (name: string) => head.indexOf(name);
+  const need = ['title', 'start_time', 'end_time', 'exercise_title'];
+  if (need.some((n) => col(n) < 0)) throw new Error("This doesn't look like a Hevy export (Settings → Export & Import Data → Export Workouts).");
+  const get = (r: string[], name: string) => (col(name) >= 0 ? r[col(name)] ?? '' : '');
+
+  const byKey = new Map<string, HevyWorkout>();
+  for (const r of rows.slice(1)) {
+    const start = hevyDate(get(r, 'start_time'));
+    const end = hevyDate(get(r, 'end_time')) ?? start;
+    const exTitle = get(r, 'exercise_title').trim();
+    if (!start || !end || !exTitle) continue;
+    const title = get(r, 'title').trim() || 'Hevy workout';
+    const key = `${title}|${start}`;
+    let w = byKey.get(key);
+    if (!w) {
+      // stable id from title + start time, so importing the same file twice doesn't duplicate
+      let h = 0;
+      for (const ch of key) h = (Math.imul(31, h) + ch.charCodeAt(0)) | 0;
+      w = { id: `csv-${(h >>> 0).toString(36)}-${start.slice(0, 16)}`, title, description: get(r, 'description') || null, start_time: start, end_time: end, exercises: [] };
+      byKey.set(key, w);
+    }
+    let ex = w.exercises[w.exercises.length - 1];
+    if (!ex || ex.title !== exTitle) {
+      ex = { index: w.exercises.length, title: exTitle, exercise_template_id: '', notes: get(r, 'exercise_notes') || null, sets: [] };
+      w.exercises.push(ex);
+    }
+    ex.sets.push({
+      index: ex.sets.length,
+      type: (get(r, 'set_type') || 'normal') as HevySet['type'],
+      weight_kg: numOrNull(get(r, 'weight_kg')),
+      reps: numOrNull(get(r, 'reps')),
+      duration_seconds: numOrNull(get(r, 'duration_seconds')),
+      rpe: numOrNull(get(r, 'rpe')),
+    } as HevySet);
+  }
+  const out = [...byKey.values()].sort((a, b) => a.start_time.localeCompare(b.start_time));
+  if (!out.length) throw new Error('No workouts found in this file.');
+  return out;
 }

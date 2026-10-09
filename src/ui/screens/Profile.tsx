@@ -68,13 +68,7 @@ export function ProfileScreen() {
           </section>
         )}
 
-        <section className="card pcard">
-          <div className="eyebrow">You</div>
-          <Row label="Age" value={`${p.age}`} />
-          <Row label="Height" value={`${p.heightCm} cm`} />
-          <Row label="Weight" value={`${fmtNum(p.weightKg, 1)} kg`} />
-          <Row label="Max heart rate" value={`${p.maxHr} bpm`} />
-        </section>
+        <BodyCard />
 
         <section className="card pcard">
           <div className="eyebrow">Goals</div>
@@ -185,5 +179,75 @@ export function ProfileScreen() {
         </section>
       </div>
     </div>
+  );
+}
+
+function BodyCard() {
+  const { analysis: a, body, setBody } = useApp();
+  const [edit, setEdit] = useState(false);
+  const p = a!.ds.profile;
+  const [f, setF] = useState({ age: '', heightCm: '', weightKg: '' });
+  const start = () => {
+    setF({ age: String(p.age || ''), heightCm: p.heightCm ? String(p.heightCm) : '', weightKg: p.weightKg ? String(Math.round(p.weightKg * 10) / 10) : '' });
+    setEdit(true);
+  };
+  const save = () => {
+    const num = (v: string, lo: number, hi: number) => {
+      const n = parseFloat(v.replace(',', '.'));
+      return Number.isFinite(n) && n >= lo && n <= hi ? n : undefined;
+    };
+    setBody({ age: num(f.age, 10, 110), heightCm: num(f.heightCm, 100, 250), weightKg: num(f.weightKg, 30, 300) });
+    setEdit(false);
+  };
+  const manual = Object.keys(body).some((k) => (body as any)[k]);
+  return (
+    <section className="card pcard">
+      <div className="row-between">
+        <div className="eyebrow">You</div>
+        {!edit && (
+          <button className="btn btn--ghost btn--sm" onClick={start} type="button">
+            Edit
+          </button>
+        )}
+      </div>
+      {edit ? (
+        <form
+          className="body-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            save();
+          }}
+        >
+          <label className="field">
+            <span className="eyebrow">Age</span>
+            <input className="input" inputMode="numeric" value={f.age} onChange={(e) => setF({ ...f, age: e.target.value })} />
+          </label>
+          <label className="field">
+            <span className="eyebrow">Height (cm)</span>
+            <input className="input" inputMode="decimal" value={f.heightCm} onChange={(e) => setF({ ...f, heightCm: e.target.value })} placeholder="178" />
+          </label>
+          <label className="field">
+            <span className="eyebrow">Weight (kg)</span>
+            <input className="input" inputMode="decimal" value={f.weightKg} onChange={(e) => setF({ ...f, weightKg: e.target.value })} placeholder="80" />
+          </label>
+          <div className="body-form__actions">
+            <button className="btn btn--ghost" type="button" onClick={() => setEdit(false)}>
+              Cancel
+            </button>
+            <button className="btn btn--primary" type="submit">
+              Save
+            </button>
+          </div>
+        </form>
+      ) : (
+        <>
+          <Row label="Age" value={p.age ? `${p.age}` : '—'} />
+          <Row label="Height" value={p.heightCm > 0 ? `${p.heightCm} cm` : 'Not set'} />
+          <Row label="Weight" value={p.weightKg > 0 ? `${fmtNum(p.weightKg, 1)} kg` : 'Not set'} />
+          <Row label="Max heart rate" value={`${p.maxHr} bpm`} />
+          <p className="fine">{manual ? 'Edited by you. Used for Fitbit Age, calories context and the coach.' : 'From Google Health when available. Tap Edit to set or correct it.'}</p>
+        </>
+      )}
+    </section>
   );
 }

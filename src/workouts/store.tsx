@@ -7,7 +7,7 @@ import { useApp, haptic } from '../state/store';
 import { ApiError } from '../auth/session';
 import { scoped } from '../auth/account';
 import { useCloudSync } from '../data/cloudSync';
-import { EMPTY_HEVY, hevyClient, hevyToWorkout, matchExercise, workoutToHevy, type HevyEvent, type HevyState } from '../integrations/hevy';
+import { EMPTY_HEVY, hevyClient, hevyToWorkout, matchExercise, parseHevyCsv, workoutToHevy, type HevyEvent, type HevyState } from '../integrations/hevy';
 import { fmtISO } from '../calc/stats';
 
 /**
@@ -124,6 +124,8 @@ interface Ctx {
   connectHevy: (apiKey: string) => Promise<boolean>;
   disconnectHevy: () => Promise<void>;
   syncHevy: () => Promise<HevySyncResult | null>;
+  /** Free path: import a Hevy CSV export. */
+  importHevyCsv: (text: string) => { added: number; updated: number; newExercises: number };
   setHevyAutoExport: (on: boolean) => void;
 }
 
@@ -394,6 +396,41 @@ export function WorkoutProvider({ children, repo = localRepository }: { children
           ? "The FITBITRACK server couldn't reach Hevy. On a free PythonAnywhere account, api.hevyapp.com has to be added to their allow-list first (see the setup guide)."
           : "Couldn't reach the FITBITRACK server. Hevy sync runs through the backend (see the setup guide).";
 
+  const importHevyCsv = (text: string) => {
+    const d0 = dataRef.current;
+    if (!d0) throw new Error('Workouts are still loading. Try again in a second.');
+    const parsed = parseHevyCsv(text);
+    const customs = [...d0.customExercises];
+    const known = [...allExercises, ...customs.filter((c) => !allExercises.some((a) => a.id === c.id))];
+    let newExercises = 0;
+    const resolve = (title: string) => {
+      const m = matchExercise(title, known);
+      if ('id' in m) return m.id;
+      const def = { ...m.create, id: `custom-${uid()}`, custom: true };
+      customs.push(def);
+      known.push(def);
+      newExercises++;
+      return def.id;
+    };
+    // same workout already present (from an earlier import or the API) → replace instead of duplicating
+    const sameAs = (w: Workout) => (h: Workout) => h.id === w.id || (h.source === 'hevy' && h.startedAt.slice(0, 16) === w.startedAt.slice(0, 16));
+    let history = [...d0.history].sort((a, b) => a.startedAt.localeCompare(b.startedAt));
+    let added = 0;
+    let updated = 0;
+    for (const hw of parsed) {
+      const w = hevyToWorkout(hw, resolve, history);
+      const exists = history.some(sameAs(w));
+      history = [...history.filter((h) => !sameAs(w)(h)), w].sort((a, b) => a.startedAt.localeCompare(b.startedAt));
+      if (exists) updated++;
+      else added++;
+    }
+    const next = { ...d0, history, customExercises: customs };
+    dataRef.current = next;
+    setData(next);
+    repo.save(next);
+    return { added, updated, newExercises };
+  };
+
   const syncHevy = async (): Promise<HevySyncResult | null> => {
     const d0 = dataRef.current;
     if (!d0?.hevy?.connected) return null;
@@ -545,6 +582,7 @@ export function WorkoutProvider({ children, repo = localRepository }: { children
     connectHevy,
     disconnectHevy,
     syncHevy,
+    importHevyCsv,
     setHevyAutoExport,
   };
   return <WCtx.Provider value={value}>{children}</WCtx.Provider>;

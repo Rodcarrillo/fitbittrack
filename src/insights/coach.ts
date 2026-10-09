@@ -177,7 +177,7 @@ export function buildCoachContext(a: Analysis, workouts: Workout[] = [], exercis
   const p = ds.profile;
   const f = coachFacts(a);
   const lines: string[] = [];
-  lines.push(`Profile: ${p.name || 'user'}, age ${p.age}, ${p.heightCm} cm, ${p.weightKg} kg, max HR ${p.maxHr}, step goal ${p.stepGoal}, sleep goal ${fmtDuration(p.sleepGoalMin)}, training goal ${p.trainingGoal}.`);
+  lines.push(`Profile: ${p.name || 'user'}, age ${p.age}, ${p.heightCm > 0 ? p.heightCm + ' cm' : 'height unknown'}, ${p.weightKg > 0 ? p.weightKg + ' kg' : 'weight unknown'}, max HR ${p.maxHr}, step goal ${p.stepGoal}, sleep goal ${fmtDuration(p.sleepGoalMin)}, training goal ${p.trainingGoal}.`);
   lines.push(`Data source: ${ds.source.label}${ds.source.isSample ? ' (SAMPLE data, not the real user)' : ''}.`);
   lines.push(
     `Today (${a.today.date}): readiness ${r0(f.readiness)}/100, sleep score ${r0(f.sleepScore)}/100, asleep ${f.sleepMin != null ? fmtDuration(f.sleepMin) : '–'} (need ${f.sleepNeedMin != null ? fmtDuration(f.sleepNeedMin) : '–'}), training load ${r0(f.loadScore)}/100, acute:chronic load ratio ${r0(f.acwr, 2)}, HRV ${f.hrvPct != null ? signed(Math.round(f.hrvPct)) + '% vs baseline' : '–'}, resting HR ${f.rhrDelta != null ? signed(Math.round(f.rhrDelta)) + ' bpm vs baseline' : '–'}, sleep consistency ${r0(f.consistency)}.`,

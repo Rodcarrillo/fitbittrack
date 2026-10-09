@@ -151,7 +151,7 @@ function estimate(ds: HealthDataset, workouts: Workout[], end: string, realAge: 
 
   // Body composition (BMI from profile)
   const bmi = ds.profile.weightKg / (ds.profile.heightCm / 100) ** 2;
-  if (Number.isFinite(bmi)) {
+  if (ds.profile.weightKg > 0 && ds.profile.heightCm > 0 && Number.isFinite(bmi)) {
     factors.push({
       key: 'bmi',
       label: 'Body mass index',

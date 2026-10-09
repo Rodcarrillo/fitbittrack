@@ -77,7 +77,11 @@ export type Tab = 'today' | 'health' | 'train' | 'trends' | 'profile';
 export type HealthView = 'recovery' | 'sleep' | 'age';
 export type Sheet = null | 'insights' | 'coach' | 'journal' | 'connect' | 'privacy';
 
+export type BodyOverrides = { age?: number; heightCm?: number; weightKg?: number };
+
 interface Ctx {
+  body: BodyOverrides;
+  setBody: (b: BodyOverrides) => void;
   loading: boolean;
   error: string | null;
   analysis: Analysis | null;
@@ -147,6 +151,18 @@ export function AppProvider({ children, account, onLogout }: { children: React.R
   const [permissions, setPermissions] = useState<Record<PermissionKey, boolean>>(() => ({ ...ALL_ON, ...store.get('permissions', {}) }));
   const [journalEdits, setJournalEdits] = useState<Record<string, JournalEntry>>(() => store.get('journal', {}));
 
+  const [body, setBodyState] = useState<BodyOverrides>(() => store.get('body', {}));
+  const setBody = (b: BodyOverrides) => {
+    setBodyState(b);
+    store.set('body', b);
+  };
+  useCloudSync<{ body?: BodyOverrides }>('settings', { body }, (v) => {
+    if (v?.body) {
+      setBodyState(v.body);
+      store.set('body', v.body);
+    }
+  });
+
   useCloudSync<Record<string, JournalEntry>>('journal', journalEdits, (v) => {
     setJournalEdits(v);
     store.set('journal', v);
@@ -193,8 +209,10 @@ export function AppProvider({ children, account, onLogout }: { children: React.R
     const journal = [...raw.journal.filter((j) => !journalEdits[j.date])];
     Object.values(journalEdits).forEach((j) => journal.push(j));
     journal.sort((a, b) => a.date.localeCompare(b.date));
-    return applyPermissions({ ...raw, journal }, permissions);
-  }, [raw, permissions, journalEdits]);
+    const profile = { ...raw.profile, ...Object.fromEntries(Object.entries(body).filter(([, v]) => typeof v === 'number' && v > 0)) };
+    if (body.age && !raw.profile.maxHr) profile.maxHr = 220 - body.age;
+    return applyPermissions({ ...raw, profile, journal }, permissions);
+  }, [raw, permissions, journalEdits, body]);
 
   const analysis = useMemo(() => (merged ? analyze(merged, computeAllScores(merged)) : null), [merged]);
 
@@ -223,7 +241,7 @@ export function AppProvider({ children, account, onLogout }: { children: React.R
 
   return (
     <AppCtx.Provider
-      value={{ loading, error, analysis, raw, tab, setTab, healthView, setHealthView, sheet, openSheet, sheetPayload, permissions, setPermission, toggleJournalTag, setJournalNote, todayJournal, refresh, refreshing, theme, setTheme, account: account ?? null, logout: () => onLogout?.() }}
+      value={{ body, setBody, loading, error, analysis, raw, tab, setTab, healthView, setHealthView, sheet, openSheet, sheetPayload, permissions, setPermission, toggleJournalTag, setJournalNote, todayJournal, refresh, refreshing, theme, setTheme, account: account ?? null, logout: () => onLogout?.() }}
     >
       {children}
     </AppCtx.Provider>

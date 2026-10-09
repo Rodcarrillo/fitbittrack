@@ -87,9 +87,10 @@ export class GoogleHealthProvider implements HealthDataProvider {
     const dates: ISODate[] = [];
     for (let d = start; d <= today; d = addDays(d, 1)) dates.push(d);
 
-    const [profile, devices, sleepRaw, exerciseRaw, ...daily] = await Promise.all([
+    const [profile, devices, heightRaw, sleepRaw, exerciseRaw, ...daily] = await Promise.all([
       api<any>('/api/profile').catch(() => null),
       api<any>('/api/devices').catch(() => null),
+      api<{ dataPoints?: any[] }>('/api/health/height/dataPoints?pageSize=5').catch(() => null),
       listAll<GHSleepPoint>('sleep', `sleep.interval.civil_end_time >= "${start}"`).catch(() => null),
       listAll<GHExercisePoint>('exercise', `exercise.interval.civil_start_time >= "${start}"`).catch(() => null),
       ...Object.values(DAILY_TYPES).map((t) => dailyRollUp(t.type, start, today).catch(() => null)),
@@ -102,6 +103,22 @@ export class GoogleHealthProvider implements HealthDataProvider {
     });
 
     const sleep = sleepRaw ? mapSleep(sleepRaw) : [];
+    // Profile only carries age; body size comes from the weight/height data types.
+    const weights = [...(series.weightKg?.entries() ?? [])].sort((a, b) => a[0].localeCompare(b[0]));
+    const latestWeight = weights.length ? weights[weights.length - 1][1] : null;
+    const heightCm = (() => {
+      const pt = heightRaw?.dataPoints?.[0];
+      let v: number | null = null;
+      const walk = (o: any) => {
+        if (v != null || o == null) return;
+        if (typeof o === 'number' || (typeof o === 'string' && /^[0-9.]+$/.test(o))) v = Number(o);
+        else if (typeof o === 'object') for (const [k, x] of Object.entries(o)) if (!/time|offset|name/i.test(k)) walk(x);
+      };
+      walk(pt?.height ?? pt);
+      if (v == null || !Number.isFinite(v)) return null;
+      const x = v as number;
+      return x < 3 ? Math.round(x * 100) : x > 1000 ? Math.round(x / 10) : Math.round(x);
+    })();
     const exercises = exerciseRaw ? mapExercise(exerciseRaw) : [];
     const has = (k: string) => (series[k]?.size ?? 0) > 0;
 
@@ -128,8 +145,8 @@ export class GoogleHealthProvider implements HealthDataProvider {
       profile: {
         name: profile?.displayName ?? 'there',
         age: n(profile?.age) ?? 30,
-        heightCm: n(profile?.heightCm) ?? 175,
-        weightKg: n(profile?.weightKg) ?? 75,
+        heightCm: heightCm ?? n(profile?.heightCm) ?? 0,
+        weightKg: latestWeight ?? n(profile?.weightKg) ?? 0,
         maxHr: n(profile?.maxHr) ?? 220 - (n(profile?.age) ?? 30),
         stepGoal: n(profile?.stepGoal) ?? 9000,
         sleepGoalMin: n(profile?.sleepGoalMin) ?? 480,
