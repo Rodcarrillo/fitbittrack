@@ -225,12 +225,13 @@ function Sleep() {
         <div className="windows" role="img" aria-label="Sleep windows for the last seven nights">
           {week.map((w) => {
             const b = bedtimeMinutes(w.start);
-            const e = b + w.minutesAsleep + w.minutesAwake;
+            const e = Math.min(b + (Number(w.minutesAsleep) || 0) + (Number(w.minutesAwake) || 0), axisEnd);
+            const left = Math.max(0, Math.min(100, pos(b)));
             return (
               <div className="windows__row" key={w.date}>
                 <span className="windows__day">{dayLetter(w.date)}</span>
                 <span className="windows__track">
-                  <span className="windows__bar" style={{ left: `${pos(b)}%`, width: `${pos(e) - pos(b)}%` }} />
+                  <span className="windows__bar" style={{ left: `${left}%`, width: `${Math.max(0, Math.min(100, pos(e)) - left)}%` }} />
                 </span>
                 <span className="windows__dur num">{fmtDuration(w.minutesAsleep)}</span>
               </div>

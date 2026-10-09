@@ -75,26 +75,44 @@ const withOffset = (iso: string, offset?: string) => {
 };
 
 const seconds = (d?: string) => (d ? parseFloat(d) : 0);
+/** Google APIs send int64 values as JSON strings ("372"); coerce everything numeric. */
+const num = (v: unknown): number | null => {
+  const n = typeof v === 'string' ? parseFloat(v) : typeof v === 'number' ? v : NaN;
+  return Number.isFinite(n) ? n : null;
+};
 
 /* ---------- sleep ---------- */
 export function mapSleep(points: GHSleepPoint[]): SleepSession[] {
-  return points
-    .filter((p) => p.sleep.metadata?.main !== false)
+  const all = points
+    .filter((p) => p.sleep?.interval?.startTime && p.sleep.interval.endTime)
     .map((p) => {
       const s = p.sleep;
-      const st = (type: string) => s.summary?.stagesSummary?.find((x) => x.type.toUpperCase().includes(type))?.minutes ?? 0;
+      const st = (type: string) => num(s.summary?.stagesSummary?.find((x) => String(x.type).toUpperCase().includes(type))?.minutes) ?? 0;
       const hasStages = (s.summary?.stagesSummary?.length ?? 0) > 0;
+      const spanMin = Math.round((new Date(s.interval.endTime).getTime() - new Date(s.interval.startTime).getTime()) / 60000);
+      const asleep = num(s.summary?.minutesAsleep) ?? (hasStages ? st('LIGHT') + st('DEEP') + st('REM') : spanMin);
+      const awake = num(s.summary?.minutesAwake) ?? (hasStages ? st('AWAKE') : 0);
       return {
-        date: civilDate(s.interval.endTime, s.interval.endUtcOffset),
-        start: withOffset(s.interval.startTime, s.interval.startUtcOffset),
-        end: withOffset(s.interval.endTime, s.interval.endUtcOffset),
-        minutesAsleep: s.summary?.minutesAsleep ?? 0,
-        minutesAwake: s.summary?.minutesAwake ?? 0,
-        minutesInBed: s.summary?.minutesInSleepPeriod ?? 0,
-        stages: hasStages ? { deepMin: st('DEEP'), lightMin: st('LIGHT'), remMin: st('REM'), awakeMin: st('AWAKE') } : null,
+        main: s.metadata?.main,
+        session: {
+          date: civilDate(s.interval.endTime, s.interval.endUtcOffset),
+          start: withOffset(s.interval.startTime, s.interval.startUtcOffset),
+          end: withOffset(s.interval.endTime, s.interval.endUtcOffset),
+          minutesAsleep: asleep,
+          minutesAwake: awake,
+          minutesInBed: num(s.summary?.minutesInSleepPeriod) ?? spanMin,
+          stages: hasStages ? { deepMin: st('DEEP'), lightMin: st('LIGHT'), remMin: st('REM'), awakeMin: st('AWAKE') } : null,
+        } as SleepSession,
       };
-    })
-    .sort((a, b) => a.date.localeCompare(b.date));
+    });
+  // One night per date: the main sleep if flagged, otherwise the longest (naps are dropped).
+  const byDate = new Map<ISODate, { main?: boolean; session: SleepSession }>();
+  for (const x of all) {
+    const cur = byDate.get(x.session.date);
+    const better = !cur || (x.main === true && cur.main !== true) || (x.main === cur.main && x.session.minutesAsleep > cur.session.minutesAsleep);
+    if (better && !(cur?.main === true && x.main !== true)) byDate.set(x.session.date, x);
+  }
+  return [...byDate.values()].map((x) => x.session).sort((a, b) => a.date.localeCompare(b.date));
 }
 
 /* ---------- exercise ---------- */
@@ -128,11 +146,11 @@ export function mapExercise(points: GHExercisePoint[]): Exercise[] {
       name: e.displayName ?? kind,
       start: withOffset(e.interval.startTime, e.interval.startUtcOffset),
       durationMin: Math.round(seconds(e.activeDuration) / 60),
-      calories: m.caloriesKcal ?? null,
-      avgHr: m.averageHeartRateBeatsPerMinute ?? null,
-      maxHr: m.maxHeartRateBeatsPerMinute ?? null,
+      calories: num(m.caloriesKcal),
+      avgHr: num(m.averageHeartRateBeatsPerMinute),
+      maxHr: num(m.maxHeartRateBeatsPerMinute),
       zones,
-      distanceKm: m.distanceMillimeters ? m.distanceMillimeters / 1e6 : null,
+      distanceKm: num(m.distanceMillimeters) ? num(m.distanceMillimeters)! / 1e6 : null,
     };
   });
 }

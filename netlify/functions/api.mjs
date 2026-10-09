@@ -193,6 +193,7 @@ async function route(req, context) {
       client_secret_set: sec.length > 0,
       client_secret_looks_valid: sec.startsWith('GOCSPX-'),
       redirect_uri_to_register_in_google: googleRedirect(req),
+      gemini_key_set: env('GEMINI_API_KEY').length > 0,
     });
   }
 
@@ -285,6 +286,9 @@ async function route(req, context) {
   const u = await currentUser(req);
   if (!u) return json({ error: 'not_signed_in' }, 401);
 
+  /* ---------- AI coach (Gemini) ---------- */
+  if (path === '/api/coach' && method === 'POST') return coachReply(u, await readJson(req));
+
   if (path === '/auth/google/disconnect' && method === 'POST') {
     if (u.googleRefresh) await fetch(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(decrypt(u.googleRefresh))}`, { method: 'POST' }).catch(() => {});
     delete u.googleRefresh;
@@ -373,4 +377,79 @@ async function route(req, context) {
   }
 
   return json({ error: 'not_found' }, 404);
+}
+
+
+/* ---------------------------------------------------------------- AI coach */
+const COACH_SYSTEM = `You are FITBITRACK Coach, a sharp, warm personal coach inside a fitness app that reads the user's Fitbit data (via Google Health) and their strength workouts.
+
+Rules:
+- Ground every answer in the DATA block. Quote the real numbers (scores, hours, ms, bpm, kg, dates). If something isn't in the data, say so plainly instead of guessing.
+- Reply in the same language the user writes in (Spanish if they write Spanish). Use "tú".
+- Be concise and practical: a direct answer first, then 2–5 short bullet points with concrete actions. Use **bold** sparingly. No headings, no tables.
+- When asked for a workout or plan, make it specific (exercises, sets × reps, rest, intensity) and adapt it to today's readiness, sleep and recent training load. Low readiness or short sleep → lighter session or active recovery.
+- Scores are FITBITRACK's own 0–100 scores computed from personal baselines, not official Fitbit scores.
+- You are not a doctor. Don't diagnose. If the user mentions chest pain, fainting, a very abnormal reading or symptoms that worry them, tell them to see a medical professional.`;
+
+const COACH_MODELS = () => [...new Set([env('GEMINI_MODEL'), 'gemini-flash-latest', 'gemini-2.5-flash'].filter(Boolean))];
+
+async function coachReply(u, body) {
+  const key = env('GEMINI_API_KEY');
+  if (!key) return json({ error: 'coach_not_configured' }, 503);
+
+  const clip = (v, n) => String(v ?? '').slice(0, n);
+  const question = clip(body.question, 1500).trim();
+  if (!question) return json({ error: 'empty_question' }, 400);
+  const context = clip(body.context, 16000);
+  const history = (Array.isArray(body.history) ? body.history : [])
+    .slice(-10)
+    .map((m) => ({ role: m?.role === 'model' ? 'model' : 'user', parts: [{ text: clip(m?.text, 4000) }] }))
+    .filter((m) => m.parts[0].text);
+
+  // per-user limit: 60 questions per hour
+  const rlKey = `coachrl:${u.id}`;
+  const now = Date.now();
+  const recent = ((await store().get(rlKey, { type: 'json' })) ?? []).filter((t) => now - t < 3600_000);
+  if (recent.length >= 60) return json({ error: 'coach_rate_limited', detail: 'Too many questions this hour. Try again in a bit.' }, 429);
+  recent.push(now);
+  await store().setJSON(rlKey, recent);
+
+  const contents = [
+    { role: 'user', parts: [{ text: `DATA (today is ${new Date().toISOString().slice(0, 10)}):\n${context}` }] },
+    { role: 'model', parts: [{ text: 'Got it. I have your data.' }] },
+    ...history,
+    { role: 'user', parts: [{ text: question }] },
+  ];
+
+  let lastErr = null;
+  for (const model of COACH_MODELS()) {
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: COACH_SYSTEM }] },
+        contents,
+        generationConfig: { temperature: 0.6, maxOutputTokens: 4096 },
+      }),
+    }).catch(() => null);
+    if (!r) {
+      lastErr = { status: 502, error: 'coach_unreachable' };
+      continue;
+    }
+    if (r.status === 404) {
+      lastErr = { status: 502, error: 'coach_model_not_found' };
+      continue; // try the next model name
+    }
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      const msg = data?.error?.message ?? `Gemini error ${r.status}`;
+      if (r.status === 429) return json({ error: 'coach_quota', detail: 'Gemini free quota reached for now. Try again in a minute.' }, 429);
+      if (r.status === 400 || r.status === 403) return json({ error: 'coach_key_invalid', detail: msg }, 502);
+      return json({ error: 'coach_failed', detail: msg }, 502);
+    }
+    const text = (data?.candidates?.[0]?.content?.parts ?? []).map((p) => (p.thought ? '' : p.text ?? '')).join('').trim();
+    if (!text) return json({ error: 'coach_empty', detail: 'The model returned no answer. Try rephrasing.' }, 502);
+    return json({ text, model });
+  }
+  return json(lastErr ?? { error: 'coach_failed' }, lastErr?.status ?? 502);
 }

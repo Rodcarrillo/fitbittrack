@@ -59,6 +59,14 @@ Después: **Deploys → Trigger deploy → Deploy site** para que tome las clave
 
 En la app: **Train → tarjeta Hevy → Connect**, y pega tu clave de API. Hevy solo da claves con **Hevy Pro** (Hevy → Settings → Developer). En Netlify no hay que pedir permisos extra.
 
+## 5b. Coach con IA (Gemini)
+
+1. Entra a <https://aistudio.google.com/apikey> con tu cuenta de Google → **Create API key** → elige tu proyecto → copia la clave.
+2. Netlify → **Environment variables** → agrega `GEMINI_API_KEY` con esa clave → **Deploys → Trigger deploy**.
+3. En la app: **Ask FITBITRACK**. Si la clave falta o falla, el coach responde con las respuestas integradas.
+
+Opcional: `GEMINI_MODEL` para elegir otro modelo (por defecto `gemini-flash-latest`).
+
 ## 6. Instalarla en el celular
 
 Abre `https://TU-SITIO.netlify.app`:

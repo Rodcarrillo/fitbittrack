@@ -28,6 +28,12 @@ const DAILY_TYPES = {
   vo2max: { type: 'daily-vo2-max', path: ['dailyVo2Max', 'vo2Max'] },
 } as const;
 
+/** Google sends int64 numbers as strings. */
+const n = (v: unknown): number | null => {
+  const x = typeof v === 'string' ? parseFloat(v) : typeof v === 'number' ? v : NaN;
+  return Number.isFinite(x) ? x : null;
+};
+
 async function listAll<T>(dataType: string, filter: string): Promise<T[]> {
   const out: T[] = [];
   let pageToken: string | undefined;
@@ -121,19 +127,19 @@ export class GoogleHealthProvider implements HealthDataProvider {
       source: { id: this.id, label: this.label, isSample: false, fetchedAt: new Date().toISOString() },
       profile: {
         name: profile?.displayName ?? 'there',
-        age: profile?.age ?? 30,
-        heightCm: profile?.heightCm ?? 175,
-        weightKg: profile?.weightKg ?? 75,
-        maxHr: profile?.maxHr ?? 220 - (profile?.age ?? 30),
-        stepGoal: profile?.stepGoal ?? 9000,
-        sleepGoalMin: profile?.sleepGoalMin ?? 480,
+        age: n(profile?.age) ?? 30,
+        heightCm: n(profile?.heightCm) ?? 175,
+        weightKg: n(profile?.weightKg) ?? 75,
+        maxHr: n(profile?.maxHr) ?? 220 - (n(profile?.age) ?? 30),
+        stepGoal: n(profile?.stepGoal) ?? 9000,
+        sleepGoalMin: n(profile?.sleepGoalMin) ?? 480,
         trainingGoal: 'build',
         units: 'metric',
       },
       devices: (devices?.pairedDevices ?? []).map((d: any) => ({
         id: d.name,
         name: d.displayName ?? 'Fitbit device',
-        battery: d.batteryLevel ?? null,
+        battery: n(d.batteryLevel),
         lastSync: d.lastSyncTime ?? null,
       })),
       today,

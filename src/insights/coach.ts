@@ -9,6 +9,7 @@
 import type { Analysis } from './engine';
 import { fmtDuration, fmtNum, mean, nonNull, signed } from '../calc/stats';
 import { api } from '../auth/session';
+import type { Workout, ExerciseDef } from '../workouts/types';
 
 export interface CoachAnswer {
   question: string;
@@ -161,4 +162,100 @@ export class RemoteCoach implements CoachService {
   async ask(question: string, a: Analysis): Promise<CoachAnswer> {
     return api<CoachAnswer>('/api/coach', { method: 'POST', body: JSON.stringify({ question, facts: coachFacts(a) }) });
   }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Gemini coach: a compact text summary of the user's data is sent    */
+/*  with each question to /api/coach. Never raw minute-level data.     */
+/* ------------------------------------------------------------------ */
+
+
+const r0 = (v: number | null | undefined, d = 0) => (v == null || !Number.isFinite(v) ? '–' : v.toFixed(d));
+
+export function buildCoachContext(a: Analysis, workouts: Workout[] = [], exercises: ExerciseDef[] = []): string {
+  const ds = a.ds;
+  const p = ds.profile;
+  const f = coachFacts(a);
+  const lines: string[] = [];
+  lines.push(`Profile: ${p.name || 'user'}, age ${p.age}, ${p.heightCm} cm, ${p.weightKg} kg, max HR ${p.maxHr}, step goal ${p.stepGoal}, sleep goal ${fmtDuration(p.sleepGoalMin)}, training goal ${p.trainingGoal}.`);
+  lines.push(`Data source: ${ds.source.label}${ds.source.isSample ? ' (SAMPLE data, not the real user)' : ''}.`);
+  lines.push(
+    `Today (${a.today.date}): readiness ${r0(f.readiness)}/100, sleep score ${r0(f.sleepScore)}/100, asleep ${f.sleepMin != null ? fmtDuration(f.sleepMin) : '–'} (need ${f.sleepNeedMin != null ? fmtDuration(f.sleepNeedMin) : '–'}), training load ${r0(f.loadScore)}/100, acute:chronic load ratio ${r0(f.acwr, 2)}, HRV ${f.hrvPct != null ? signed(Math.round(f.hrvPct)) + '% vs baseline' : '–'}, resting HR ${f.rhrDelta != null ? signed(Math.round(f.rhrDelta)) + ' bpm vs baseline' : '–'}, sleep consistency ${r0(f.consistency)}.`,
+  );
+  if (f.best) lines.push(`Biggest positive readiness factor: ${f.best.label}. Biggest drag: ${f.worst?.label ?? ''}.`);
+
+  const sleepBy = new Map(ds.sleep.map((s) => [s.date, s]));
+  const scoreBy = new Map(a.scores.map((s) => [s.date, s]));
+  lines.push('\nLast 21 days (date | readiness | sleep score | asleep | deep/REM min | bedtime | RHR | HRV ms | resp | SpO2 | steps | kcal | load):');
+  for (const d of ds.days.slice(-21)) {
+    const s = sleepBy.get(d.date);
+    const sc = scoreBy.get(d.date);
+    const bed = s ? s.start.slice(11, 16) : '–';
+    lines.push(
+      [d.date, r0(sc?.readiness?.score), r0(sc?.sleep?.score), s ? fmtDuration(s.minutesAsleep) : '–', s?.stages ? `${s.stages.deepMin}/${s.stages.remMin}` : '–', bed, r0(d.restingHr), r0(d.hrv), r0(d.respiratoryRate, 1), r0(d.spo2), r0(d.steps), r0(d.calories), r0(sc?.load.score)].join(' | '),
+    );
+  }
+
+  const ex = ds.exercises.slice(-15);
+  if (ex.length) {
+    lines.push('\nRecent Fitbit activities:');
+    for (const e of ex) lines.push(`${e.date} ${e.name} ${e.durationMin} min${e.avgHr ? `, avg HR ${e.avgHr}` : ''}${e.calories ? `, ${e.calories} kcal` : ''}${e.distanceKm ? `, ${e.distanceKm.toFixed(1)} km` : ''}`);
+  }
+
+  const nameOf = new Map(exercises.map((e) => [e.id, e.name]));
+  const ws = workouts.slice(-10);
+  if (ws.length) {
+    lines.push('\nRecent strength workouts (exercise: sets as kg×reps):');
+    for (const w of ws) {
+      const exs = w.exercises
+        .map((we) => {
+          const sets = we.sets.filter((s) => s.completed).map((s) => `${s.weight ?? 0}×${s.reps ?? 0}`);
+          return sets.length ? `${nameOf.get(we.exerciseId) ?? we.exerciseId}: ${sets.join(', ')}` : '';
+        })
+        .filter(Boolean);
+      lines.push(`${w.date} "${w.name}" ${Math.round(w.durationSec / 60)} min${w.prs.length ? `, ${w.prs.length} PRs` : ''} — ${exs.join('; ')}`);
+    }
+  }
+
+  const j = ds.journal.slice(-10);
+  if (j.length) {
+    lines.push('\nJournal (recent):');
+    for (const e of j) lines.push(`${e.date}: ${e.tags.join(', ')}${e.note ? ` — "${e.note.slice(0, 140)}"` : ''}`);
+  }
+  if (a.insights.length) lines.push('\nApp insights: ' + a.insights.slice(0, 5).map((i) => i.title).join(' · '));
+  return lines.join('\n');
+}
+
+export type CoachTurn = { role: 'user' | 'model'; text: string };
+
+export class CoachUnavailable extends Error {
+  constructor(public code: string, message: string) {
+    super(message);
+  }
+}
+
+/** Calls the server's Gemini coach. Throws CoachUnavailable with a readable message on failure. */
+export async function askGemini(question: string, context: string, history: CoachTurn[]): Promise<string> {
+  const base: string = (import.meta as any).env?.VITE_API_BASE ?? '';
+  let res: Response;
+  try {
+    res = await fetch(`${base}/api/coach`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question, context, history }),
+    });
+  } catch {
+    throw new CoachUnavailable('offline', "Couldn't reach the coach. Check your connection.");
+  }
+  const body = await res.json().catch(() => ({}));
+  if (res.ok && body.text) return body.text as string;
+  const code = body.error ?? `http_${res.status}`;
+  const msg =
+    code === 'coach_not_configured'
+      ? 'The AI coach is not set up yet (missing GEMINI_API_KEY). Showing the built-in answer.'
+      : code === 'coach_key_invalid'
+        ? 'Gemini rejected the API key. Check GEMINI_API_KEY in Netlify.'
+        : body.detail ?? 'The AI coach had a problem. Showing the built-in answer.';
+  throw new CoachUnavailable(code, msg);
 }

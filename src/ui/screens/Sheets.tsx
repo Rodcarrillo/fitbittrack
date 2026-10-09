@@ -3,7 +3,10 @@ import { PERMISSIONS, useApp } from '../../state/store';
 import { InsightCard } from '../components/Cards';
 import { IconCheck, IconClose, IconSpark, IconArrowRight, IconShield } from '../components/Icons';
 import { LogoMark } from '../components/Logo';
-import { LocalCoach, SUGGESTED_QUESTIONS, type CoachAnswer } from '../../insights/coach';
+import { LocalCoach, SUGGESTED_QUESTIONS, askGemini, buildCoachContext, type CoachAnswer, type CoachTurn, CoachUnavailable } from '../../insights/coach';
+import { useWorkouts } from '../../workouts/store';
+import { EXERCISE_LIBRARY } from '../../workouts/library';
+import { SERVER_MODE } from '../../data/cloudSync';
 import { MIN_SAMPLES, TAG_LABEL } from '../../insights/engine';
 import { GOOGLE_HEALTH_SCOPES } from '../../auth/session';
 import type { JournalTag } from '../../domain/types';
@@ -55,27 +58,80 @@ function InsightsSheet() {
   );
 }
 
+type ChatMsg = { question: string; text?: string; local?: CoachAnswer; note?: string; pending?: boolean };
+
+/** Tiny, safe renderer for the coach's markdown-ish replies: paragraphs, bullets, **bold**. */
+function RichText({ text }: { text: string }) {
+  const inline = (t: string) => t.split(/(\*\*[^*]+\*\*)/g).map((part, i) => (part.startsWith('**') && part.endsWith('**') ? <b key={i}>{part.slice(2, -2)}</b> : <React.Fragment key={i}>{part}</React.Fragment>));
+  const blocks: React.ReactNode[] = [];
+  let list: string[] = [];
+  const flush = () => {
+    if (list.length) blocks.push(<ul key={blocks.length}>{list.map((li, i) => <li key={i}>{inline(li)}</li>)}</ul>);
+    list = [];
+  };
+  for (const raw of text.split('\n')) {
+    const line = raw.trim();
+    const m = line.match(/^(?:[-*•]|\d+[.)])\s+(.*)$/);
+    if (m) list.push(m[1]);
+    else {
+      flush();
+      if (line) blocks.push(<p key={blocks.length}>{inline(line.replace(/^#+\s*/, ''))}</p>);
+    }
+  }
+  flush();
+  return <div className="rich">{blocks}</div>;
+}
+
 function CoachSheet() {
   const { analysis: a } = useApp();
-  const [coach] = useState(() => new LocalCoach());
-  const [thread, setThread] = useState<CoachAnswer[]>([]);
+  const wk = useWorkouts();
+  const [local] = useState(() => new LocalCoach());
+  const [thread, setThread] = useState<ChatMsg[]>([]);
   const [q, setQ] = useState('');
   const [busy, setBusy] = useState(false);
+  const [aiOff, setAiOff] = useState(!SERVER_MODE);
   const endRef = useRef<HTMLDivElement>(null);
+  const scroll = () => setTimeout(() => endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }), 30);
 
   const ask = async (question: string) => {
-    if (!a || !question.trim()) return;
+    if (!a || !question.trim() || busy) return;
+    const qq = question.trim();
     setBusy(true);
-    const ans = await coach.ask(question.trim(), a);
-    setThread((t) => [...t, ans]);
     setQ('');
+    const prior = thread;
+    setThread((t) => [...t, { question: qq, pending: true }]);
+    scroll();
+    let msg: ChatMsg;
+    if (!aiOff) {
+      try {
+        const history: CoachTurn[] = prior.flatMap((m) => [
+          { role: 'user' as const, text: m.question },
+          { role: 'model' as const, text: m.text ?? (m.local ? [m.local.lead, ...m.local.points].join('\n') : '') },
+        ]);
+        const context = buildCoachContext(a, wk.data?.history ?? [], [...EXERCISE_LIBRARY, ...(wk.data?.customExercises ?? [])]);
+        msg = { question: qq, text: await askGemini(qq, context, history) };
+      } catch (e) {
+        const err = e as CoachUnavailable;
+        if (err.code === 'coach_not_configured') setAiOff(true);
+        msg = { question: qq, local: await local.ask(qq, a), note: err.message };
+      }
+    } else {
+      msg = { question: qq, local: await local.ask(qq, a) };
+    }
+    setThread((t) => [...t.slice(0, -1), msg]);
     setBusy(false);
-    setTimeout(() => endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }), 30);
+    scroll();
   };
 
   return (
     <div className="coach-chat">
-      {thread.length === 0 && <p className="fine">Answers come from your own FITBITRACK data: scores, baselines, workouts and journal.</p>}
+      {thread.length === 0 && (
+        <p className="fine">
+          {aiOff
+            ? 'Answers come from your own FITBITRACK data: scores, baselines, workouts and journal.'
+            : 'Ask anything, in any language. Gemini answers using a summary of your last weeks of sleep, recovery, activity and workouts.'}
+        </p>
+      )}
       {thread.map((t, i) => (
         <div key={i} className="qa">
           <div className="qa__q">{t.question}</div>
@@ -84,24 +140,33 @@ function CoachSheet() {
               <IconSpark size={14} />
             </span>
             <div>
-              <p className="qa__lead">{t.lead}</p>
-              <ul>
-                {t.points.map((p, k) => (
-                  <li key={k}>{p}</li>
-                ))}
-              </ul>
+              {t.pending && <p className="qa__thinking">Thinking…</p>}
+              {t.text && <RichText text={t.text} />}
+              {t.local && (
+                <>
+                  <p className="qa__lead">{t.local.lead}</p>
+                  <ul>
+                    {t.local.points.map((p, k) => (
+                      <li key={k}>{p}</li>
+                    ))}
+                  </ul>
+                </>
+              )}
+              {t.note && <p className="fine qa__note">{t.note}</p>}
             </div>
           </div>
         </div>
       ))}
       <div ref={endRef} />
-      <div className="chips">
-        {SUGGESTED_QUESTIONS.map((s) => (
-          <button key={s} className="chip" onClick={() => ask(s)} type="button" disabled={busy}>
-            {s}
-          </button>
-        ))}
-      </div>
+      {thread.length === 0 && (
+        <div className="chips">
+          {SUGGESTED_QUESTIONS.map((s) => (
+            <button key={s} className="chip" onClick={() => ask(s)} type="button" disabled={busy}>
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
       <form
         className="ask"
         onSubmit={(e) => {
@@ -112,7 +177,7 @@ function CoachSheet() {
         <label htmlFor="coach-q" className="sr-only">
           Ask FITBITRACK
         </label>
-        <input id="coach-q" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Ask about your recovery, sleep or training" autoComplete="off" />
+        <input id="coach-q" value={q} onChange={(e) => setQ(e.target.value)} placeholder={aiOff ? 'Ask about your recovery, sleep or training' : 'Ask your coach anything…'} autoComplete="off" />
         <button className="ask__go" type="submit" disabled={busy || !q.trim()} aria-label="Ask">
           <IconArrowRight size={18} />
         </button>
