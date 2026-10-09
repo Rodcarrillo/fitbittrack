@@ -1151,3 +1151,24 @@ button.prcard:hover { border-color: rgba(110, 138, 240, 0.35); }
 .connect-banner { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; border-color: color-mix(in srgb, var(--accent) 35%, transparent); }
 .connect-banner > div { flex: 1; min-width: 200px; }
 .connect-banner a { text-decoration: none; }
+
+/* ---------------- v3 identity: black heartbeat on white ---------------- */
+:root { --logo: #000; }
+.logomark--tile { background: #fff; border: 1px solid rgba(0, 0, 0, 0.08); box-shadow: 0 4px 14px -6px rgba(0, 0, 0, 0.45); }
+
+/* splash: F → dumbbell → heartbeat, pure white */
+.splash { background: #fff; gap: 0; transition: opacity 0.4s ease, visibility 0.4s; }
+.splash--out { opacity: 0; visibility: hidden; }
+.splash__svg { width: min(46vw, 220px); height: auto; overflow: visible; }
+.splash svg * { transform-box: fill-box; transform-origin: center; }
+.sp-f { opacity: 0; animation: spFIn 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.05s both, spFOut 0.32s cubic-bezier(0.55, 0, 0.45, 1) 0.68s forwards; }
+.sp-bell__p { opacity: 0; animation-name: spBellIn, spBellOut; animation-duration: 0.38s, 0.28s; animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1), cubic-bezier(0.55, 0, 0.45, 1); animation-fill-mode: both, forwards; }
+.sp-pulse { opacity: 0; stroke-dasharray: 1; stroke-dashoffset: 1; animation: spDraw 0.62s cubic-bezier(0.65, 0, 0.35, 1) 1.86s forwards; }
+@keyframes spFIn { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: none; } }
+@keyframes spFOut { from { opacity: 1; transform: none; filter: blur(0); } to { opacity: 0; transform: scale(0.82) skewX(-6deg); filter: blur(4px); } }
+@keyframes spBellIn { from { opacity: 0; transform: scale(0.4, 0.05); } to { opacity: 1; transform: none; } }
+@keyframes spBellOut { from { opacity: 1; transform: none; } to { opacity: 0; transform: scale(1, 0.08); } }
+@keyframes spDraw { 0% { opacity: 1; stroke-dashoffset: 1; } 100% { opacity: 1; stroke-dashoffset: 0; } }
+.splash--static .sp-f, .splash--static .sp-bell__p { display: none; }
+.splash--static .sp-pulse { animation: none; opacity: 1; stroke-dashoffset: 0; }
+@media (prefers-reduced-motion: reduce) { .splash { transition-duration: 0.2s; } }

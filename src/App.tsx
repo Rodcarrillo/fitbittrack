@@ -210,7 +210,7 @@ export default function App() {
       ) : account === null ? (
         <LoginScreen auth={auth} onAuthed={signedIn} />
       ) : null}
-      {splash && <Splash onDone={done} />}
+      {splash && <Splash ready={account !== undefined} onDone={done} />}
     </>
   );
 }

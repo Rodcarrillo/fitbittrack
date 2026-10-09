@@ -2,24 +2,30 @@ import React, { useEffect, useRef, useState } from 'react';
 import bandPng from './band.png';
 
 /*
- * FITBITRACK mark: a heartbeat line in royal blue with a soft glow.
- * The splash morphs an "F" into the same 7-point line, so both shapes share one path.
+ * FITBITRACK mark: a black heartbeat line on a white tile.
+ * All three splash icons (F, dumbbell, heartbeat) share one 600×600 drawing space
+ * traced from the brand reference, so they sit at the same scale and center.
  */
-type Pt = [number, number];
-const PULSE: Pt[] = [[2, 13], [7.5, 13], [9.6, 15.6], [12.4, 5.5], [15.4, 19], [17.4, 13], [22, 13]];
-// F drawn as one stroke (the middle arm doubles back), padded to 7 points.
-const F: Pt[] = [[17, 4], [7.5, 4], [7.5, 12], [14.5, 12], [7.5, 12], [7.5, 20.5], [7.5, 20.5]];
-
-const toPath = (pts: Pt[]) => pts.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(2)} ${p[1].toFixed(2)}`).join('');
-const lerp = (a: Pt[], b: Pt[], t: number): Pt[] => a.map((p, i) => [p[0] + (b[i][0] - p[0]) * t, p[1] + (b[i][1] - p[1]) * t]);
-const PULSE_D = toPath(PULSE);
+const PULSE_D = 'M100 305H225L250 355L305 205L355 410L390 305H515';
+// stylized italic "F" (filled)
+const F_D =
+  'M197 436L281 254Q292 227 322 227H478Q462 266 410 268H310Q285 270 273 306Q285 298 305 298H430Q414 343 385 345H306L268 420Q260 436 245 436Z';
+// dumbbell pieces: [x, y, w, h], symmetric around x = 300
+const BELL: [number, number, number, number][] = [
+  [80, 270, 20, 50],
+  [112, 242, 30, 106],
+  [155, 210, 38, 168],
+  [210, 282, 180, 24],
+  [407, 210, 38, 168],
+  [458, 242, 30, 106],
+  [500, 270, 20, 50],
+];
 
 export function LogoMark({ size = 30, tile = true }: { size?: number; tile?: boolean }) {
   return (
     <span className={`logomark ${tile ? 'logomark--tile' : ''}`} style={{ width: size, height: size }}>
-      <svg viewBox="0 0 24 24" width={size * (tile ? 0.72 : 1)} height={size * (tile ? 0.72 : 1)} fill="none" aria-hidden="true">
-        <path d={PULSE_D} stroke="var(--logo-glow)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="logomark__glow" />
-        <path d={PULSE_D} stroke="var(--logo)" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+      <svg viewBox="72 72 470 470" width={size * (tile ? 0.74 : 1)} height={size * (tile ? 0.74 : 1)} fill="none" aria-hidden="true">
+        <path d={PULSE_D} stroke="var(--logo)" strokeWidth="26" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     </span>
   );
@@ -39,65 +45,40 @@ export function BandIcon({ size = 20 }: { size?: number }) {
   return <span className="bandicon" aria-hidden="true" style={{ width: size, height: size, WebkitMaskImage: `url(${bandPng})`, maskImage: `url(${bandPng})` }} />;
 }
 
-const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
-
-/** Opening animation: an F is drawn, then reshapes into the heartbeat mark, then the app fades in. */
-export function Splash({ onDone }: { onDone: () => void }) {
-  const pathRef = useRef<SVGPathElement>(null);
-  const glowRef = useRef<SVGPathElement>(null);
-  const [phase, setPhase] = useState<'draw' | 'morph' | 'word' | 'out'>('draw');
-
-  useEffect(() => {
-    const reduce = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (reduce) {
-      onDone();
-      return;
-    }
-    let raf = 0;
-    const t0 = performance.now();
-    const DRAW = 620;
-    const HOLD = 160;
-    const MORPH = 680;
-    const tick = (now: number) => {
-      const t = now - t0;
-      if (t > DRAW + HOLD) {
-        const k = ease(Math.min(1, (t - DRAW - HOLD) / MORPH));
-        const d = toPath(lerp(F, PULSE, k));
-        pathRef.current?.setAttribute('d', d);
-        glowRef.current?.setAttribute('d', d);
-        if (k >= 1) {
-          setPhase('word');
-          return;
-        }
-        setPhase('morph');
-      }
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [onDone]);
+/**
+ * Opening animation on a white screen: F → dumbbell → heartbeat drawn left to right.
+ * Holds on the heartbeat until `ready`, then fades into the app. ~2.6 s total.
+ */
+export function Splash({ ready = true, onDone }: { ready?: boolean; onDone: () => void }) {
+  const [finished, setFinished] = useState(false);
+  const [out, setOut] = useState(false);
+  const reduce = useRef(typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches);
 
   useEffect(() => {
-    if (phase !== 'word') return;
-    const a = setTimeout(() => setPhase('out'), 650);
-    const b = setTimeout(onDone, 1050);
-    return () => {
-      clearTimeout(a);
-      clearTimeout(b);
-    };
-  }, [phase, onDone]);
+    const t = setTimeout(() => setFinished(true), reduce.current ? 350 : 2500);
+    return () => clearTimeout(t);
+  }, []);
 
-  const fd = toPath(F);
+  useEffect(() => {
+    if (!finished || !ready) return;
+    setOut(true);
+    const t = setTimeout(onDone, 420);
+    return () => clearTimeout(t);
+  }, [finished, ready, onDone]);
+
   return (
-    <div className={`splash splash--${phase}`} aria-hidden="true">
-      <div className="splash__mark">
-        <svg viewBox="0 0 24 24" width="104" height="104" fill="none">
-          <path ref={glowRef} d={fd} stroke="var(--logo-glow)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className="splash__glow" pathLength={1} />
-          <path ref={pathRef} d={fd} stroke="var(--logo)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="splash__line" pathLength={1} />
-        </svg>
-      </div>
-      <div className="splash__word">FITBITRACK</div>
-      <div className="splash__tag">Your Fitbit data. Reimagined.</div>
+    <div className={`splash ${reduce.current ? 'splash--static' : ''} ${out ? 'splash--out' : ''}`} aria-hidden="true">
+      <svg className="splash__svg" viewBox="0 0 600 600" fill="none">
+        <g transform="translate(-37 -31)">
+          <path className="sp-f" d={F_D} fill="#000" />
+        </g>
+        <g className="sp-bell">
+          {BELL.map(([x, y, w, h], i) => (
+            <rect key={i} className="sp-bell__p" style={{ animationDelay: `${0.78 + Math.abs(3 - i) * 0.04}s, ${1.62 + (3 - Math.abs(3 - i)) * 0.03}s` }} x={x} y={y} width={w} height={h} rx={Math.min(w, h) / 2} fill="#000" />
+          ))}
+        </g>
+        <path className="sp-pulse" transform="translate(-7 -7)" d={PULSE_D} pathLength={1} stroke="#000" strokeWidth="25" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
     </div>
   );
 }
