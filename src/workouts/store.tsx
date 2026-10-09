@@ -125,7 +125,7 @@ interface Ctx {
   disconnectHevy: () => Promise<void>;
   syncHevy: () => Promise<HevySyncResult | null>;
   /** Free path: import a Hevy CSV export. */
-  importHevyCsv: (text: string) => { added: number; updated: number; newExercises: number };
+  importHevyCsv: (text: string) => { added: number; updated: number; newExercises: number; routines: number };
   setHevyAutoExport: (on: boolean) => void;
 }
 
@@ -424,11 +424,30 @@ export function WorkoutProvider({ children, repo = localRepository }: { children
       if (exists) updated++;
       else added++;
     }
-    const next = { ...d0, history, customExercises: customs };
+    // Hevy's CSV has no routines, so rebuild them: every workout name used 2+ times becomes a
+    // routine with the exercises (and set counts) of its most recent session.
+    const routines = [...d0.routines];
+    let routineCount = 0;
+    const hevyRuns = history.filter((w) => w.source === 'hevy');
+    const names = new Map<string, number>();
+    hevyRuns.forEach((w) => names.set(w.name, (names.get(w.name) ?? 0) + 1));
+    for (const [name, count] of names) {
+      if (count < 2 || /^(morning|afternoon|evening|night) workout/i.test(name)) continue;
+      const last = [...hevyRuns].reverse().find((w) => w.name === name)!;
+      const items = last.exercises.filter((e) => e.sets.length).map((e) => ({ exerciseId: e.exerciseId, sets: e.sets.length, restSec: e.restSec || 90 }));
+      if (!items.length) continue;
+      const id = `hevy-routine-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+      const r = { id, name, notes: 'Built from your Hevy history', items, updatedAt: new Date().toISOString() };
+      const i = routines.findIndex((x) => x.id === id);
+      if (i >= 0) routines[i] = r;
+      else routines.push(r);
+      routineCount++;
+    }
+    const next = { ...d0, history, customExercises: customs, routines };
     dataRef.current = next;
     setData(next);
     repo.save(next);
-    return { added, updated, newExercises };
+    return { added, updated, newExercises, routines: routineCount };
   };
 
   const syncHevy = async (): Promise<HevySyncResult | null> => {

@@ -191,7 +191,7 @@ function HevyCsvImport() {
     setMsg(null);
     try {
       const r = w.importHevyCsv(await f.text());
-      setMsg({ ok: true, text: `${r.added} workouts imported${r.updated ? `, ${r.updated} updated` : ''}${r.newExercises ? ` · ${r.newExercises} new exercises added` : ''}.` });
+      setMsg({ ok: true, text: `${r.added} workouts imported${r.updated ? `, ${r.updated} updated` : ''}${r.newExercises ? ` · ${r.newExercises} new exercises added` : ''}${r.routines ? ` · ${r.routines} routines ready in Routines` : ''}.` });
     } catch (e) {
       setMsg({ ok: false, text: e instanceof Error ? e.message : "Couldn't read that file." });
     } finally {
@@ -205,7 +205,7 @@ function HevyCsvImport() {
         <li>
           In Hevy open <b>Profile → Settings → Export &amp; Import Data → Export Workouts</b>. You get a <b>.csv</b> file.
         </li>
-        <li>Choose that file here. Workouts, sets, weights and PRs are added to History; importing again later only adds what's new.</li>
+        <li>Choose that file here. Workouts, sets, weights and PRs go to History, and your repeated workouts (Push, Pull…) become Routines. Importing again later only adds what's new.</li>
       </ol>
       <label className={`btn btn--primary btn--block ${busy ? 'is-busy' : ''}`}>
         {busy ? 'Importing…' : 'Choose Hevy CSV file'}
