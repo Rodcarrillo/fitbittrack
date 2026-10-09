@@ -1090,7 +1090,8 @@ button.prcard:hover { border-color: rgba(110, 138, 240, 0.35); }
 .hevy-sync { margin-top: 16px; }
 .srctag { font-size: 9.5px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; padding: 2px 6px; border-radius: 6px; color: var(--muted); border: 1px solid var(--line-strong); }
 /* fixes: top bar fit on phones, Fitbit Age scale labels */
-@media (max-width: 520px) { .topbar__right .refresh-btn { display: none; } .topbar__right { gap: 8px; } }
+@media (max-width: 520px) { .topbar__right { gap: 6px; } .topbar .icon-btn { width: 36px; height: 36px; } }
+@media (max-width: 430px) { .topbar .wordmark__text { font-size: 12.5px; letter-spacing: 0.16em; } .topbar .wordmark { gap: 7px; } .topbar { padding-left: 12px; padding-right: 12px; } }
 .age-scale { height: 78px; }
 .age-scale__real { top: 27px; flex-direction: column; gap: 3px; }
 .age-scale__lo, .age-scale__hi { top: 42px; }
@@ -1155,3 +1156,15 @@ button.prcard:hover { border-color: rgba(110, 138, 240, 0.35); }
 .hevy-csv__ok { color: var(--good); font-weight: 600; }
 .body-form { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
 .body-form__actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+/* ---------------- mobile scroll fixes ----------------
+   - top bar always pinned below the status bar / notch (never hidden)
+   - no rubber-band bounce dragging the page and the bar around
+   - pull-to-refresh is an overlay, so it never shifts the layout */
+html, body { overscroll-behavior-y: none; }
+.topbar { top: 0; padding-top: calc(12px + env(safe-area-inset-top, 0px)); min-height: calc(60px + env(safe-area-inset-top, 0px)); }
+.subnav { top: calc(env(safe-area-inset-top, 0px) + 60px); }
+.ptr { position: fixed; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 66px); z-index: 25; width: 36px; height: 36px !important; margin-left: -18px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); box-shadow: 0 6px 18px -8px rgba(0, 0, 0, 0.5); pointer-events: none; transition: opacity 0.15s ease; }
+@media (min-width: 1024px) { .topbar { padding-top: 14px; min-height: 0; } .ptr { display: none; } }
+.topbar { background: color-mix(in srgb, var(--bg) 94%, transparent); }
+.subnav { background: var(--bg); box-shadow: 0 8px 12px -8px var(--bg); }

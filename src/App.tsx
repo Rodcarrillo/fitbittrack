@@ -23,30 +23,44 @@ const NAV: { tab: Tab; label: string; icon: React.ReactNode }[] = [
 
 function usePullToRefresh(onRefresh: () => Promise<void>) {
   const [pull, setPull] = useState(0);
-  const start = useRef<number | null>(null);
+  const start = useRef<{ y: number; x: number } | null>(null);
+  const pullRef = useRef(0);
   useEffect(() => {
+    const set = (v: number) => {
+      pullRef.current = v;
+      setPull(v);
+    };
     const down = (e: TouchEvent) => {
-      start.current = window.scrollY <= 0 ? e.touches[0].clientY : null;
+      // only from the very top of the page, and never inside sheets / scrollable panels
+      const inPanel = (e.target as HTMLElement | null)?.closest?.('.sheet-wrap, .aw, .chips--scroll, .subnav, input, textarea');
+      start.current = window.scrollY <= 0 && !inPanel ? { y: e.touches[0].clientY, x: e.touches[0].clientX } : null;
     };
     const move = (e: TouchEvent) => {
-      if (start.current == null) return;
-      const dy = e.touches[0].clientY - start.current;
-      setPull(dy > 0 ? Math.min(90, dy * 0.5) : 0);
+      if (!start.current) return;
+      if (window.scrollY > 0) {
+        start.current = null;
+        set(0);
+        return;
+      }
+      const dy = e.touches[0].clientY - start.current.y;
+      const dx = Math.abs(e.touches[0].clientX - start.current.x);
+      if (dx > Math.abs(dy)) return; // horizontal swipe
+      set(dy > 12 ? Math.min(90, (dy - 12) * 0.5) : 0);
     };
     const up = () => {
-      setPull((p) => {
-        if (p >= 60) onRefresh();
-        return 0;
-      });
+      if (pullRef.current >= 60) onRefresh();
+      set(0);
       start.current = null;
     };
     window.addEventListener('touchstart', down, { passive: true });
     window.addEventListener('touchmove', move, { passive: true });
     window.addEventListener('touchend', up);
+    window.addEventListener('touchcancel', up);
     return () => {
       window.removeEventListener('touchstart', down);
       window.removeEventListener('touchmove', move);
       window.removeEventListener('touchend', up);
+      window.removeEventListener('touchcancel', up);
     };
   }, [onRefresh]);
   return pull;
@@ -115,7 +129,7 @@ function Shell() {
           </div>
         </header>
 
-        <div className="ptr" style={{ height: pull, opacity: pull / 60 }} aria-hidden="true">
+        <div className="ptr" style={{ opacity: Math.min(1, pull / 60), transform: `rotate(${pull * 3}deg)` }} aria-hidden="true">
           <IconRefresh size={18} className={pull >= 60 ? 'is-ready' : ''} />
         </div>
 
