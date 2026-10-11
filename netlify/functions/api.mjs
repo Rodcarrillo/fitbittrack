@@ -195,6 +195,20 @@ async function route(req, context) {
       client_secret_looks_valid: sec.startsWith('GOCSPX-'),
       redirect_uri_to_register_in_google: googleRedirect(req),
       gemini_key_set: env('GEMINI_API_KEY').length > 0,
+      ...(await (async () => {
+        const u = await currentUser(req).catch(() => null);
+        if (!u?.googleRefresh) return { signed_in: !!u, google_connected: false };
+        const r = await googleCall(u, 'GET', '/users/me/pairedDevices').catch(() => null);
+        const body = r ? await r.json().catch(() => ({})) : {};
+        return {
+          signed_in: true,
+          google_connected: true,
+          band_permission_granted: (u.googleScopes ?? '').includes('googlehealth.settings.readonly'),
+          devices_status: r?.status ?? 'error',
+          devices: (body.pairedDevices ?? []).map((d) => ({ device: d.deviceVersion, type: d.deviceType, battery: d.batteryLevel ?? d.batteryStatus ?? null, lastSync: d.lastSyncTime ?? null })),
+          devices_error: body.error?.message ?? undefined,
+        };
+      })()),
     });
   }
 
@@ -274,13 +288,16 @@ async function route(req, context) {
     u.googleAccess = encrypt(t.access_token);
     u.googleAccessExp = Date.now() + (t.expires_in ?? 3600) * 1000;
     if (t.refresh_token) u.googleRefresh = encrypt(t.refresh_token);
+    u.googleScopes = String(t.scope ?? '');
     await saveUser(u);
     return new Response(null, { status: 302, headers: [['Location', '/?google=connected'], ['Set-Cookie', headers['Set-Cookie']], ['Set-Cookie', sessionCookie(req, u.id)]] });
   }
 
   if (path === '/auth/session') {
     const u = await currentUser(req);
-    return json({ connected: !!u?.googleRefresh });
+    const scopes = u?.googleScopes ?? '';
+    // connected before the band/battery permission existed → ask once to reconnect
+    return json({ connected: !!u?.googleRefresh, needsReconnect: !!u?.googleRefresh && !scopes.includes('googlehealth.settings.readonly') });
   }
 
   /* everything below needs a signed-in user */

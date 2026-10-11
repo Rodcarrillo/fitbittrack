@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { api } from '../../auth/session';
 import { useApp } from '../../state/store';
 import { SERVER_MODE } from '../../data/cloudSync';
 import { ScoreRing } from '../components/ScoreRing';
@@ -18,6 +19,13 @@ const googleResult = typeof location !== 'undefined' ? new URLSearchParams(locat
 
 export function TodayScreen() {
   const { analysis: a, setTab, setHealthView, openSheet, todayJournal } = useApp();
+  const [needsReconnect, setNeedsReconnect] = useState(false);
+  useEffect(() => {
+    if (!SERVER_MODE) return;
+    api<{ needsReconnect?: boolean }>('/auth/session')
+      .then((r) => setNeedsReconnect(!!r.needsReconnect))
+      .catch(() => {});
+  }, []);
   if (!a) return null;
   const { ds, today } = a;
   const td = ds.days[ds.days.length - 1];
@@ -38,6 +46,18 @@ export function TodayScreen() {
         </h1>
         <p className="hello__sub">Here's how you're doing today.</p>
       </header>
+
+      {SERVER_MODE && !ds.source.isSample && needsReconnect && (
+        <section className="card connect-banner">
+          <div>
+            <b>Sync your band battery</b>
+            <p className="fine">Google needs one more permission (devices) to show your Fitbit battery. Reconnect and accept all the boxes.</p>
+          </div>
+          <a className="btn btn--primary btn--sm" href="/auth/google/start">
+            Reconnect Google Health
+          </a>
+        </section>
+      )}
 
       {SERVER_MODE && ds.source.isSample && (
         <section className="card connect-banner">
