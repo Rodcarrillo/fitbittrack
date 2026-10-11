@@ -78,7 +78,7 @@ function NumInput({ value, onChange, placeholder, decimal, id, label, done: isDo
 function LiveWorkout({ a }: { a: ActiveWorkout }) {
   const w = useWorkouts();
   const now = useNow(500);
-  const [confirm, setConfirm] = useState<null | 'discard' | 'empty'>(null);
+  const [confirm, setConfirm] = useState<null | 'discard'>(null);
   const history = w.data?.history ?? [];
   const elapsed = w.elapsedSec(a, now);
   const completed = workoutSets(a);
@@ -89,11 +89,23 @@ function LiveWorkout({ a }: { a: ActiveWorkout }) {
     return () => document.body.classList.remove('no-scroll');
   }, []);
 
+  const [finishAsk, setFinishAsk] = useState(false);
+  // sets with reps typed in but not ticked: most people forget the check button
+  const filledUnchecked = a.exercises.reduce((n, e) => n + e.sets.filter((s) => !done(s) && (s.reps ?? 0) > 0).length, 0);
   const finish = () => {
-    if (!a.exercises.some((e) => e.sets.some(done))) {
-      setConfirm('empty');
+    if (filledUnchecked > 0 || !a.exercises.some((e) => e.sets.some(done))) {
+      setFinishAsk(true);
       return;
     }
+    w.finish();
+  };
+  const completeFilledAndFinish = () => {
+    const at = new Date().toISOString();
+    w.update((x) => ({
+      ...x,
+      exercises: x.exercises.map((e) => ({ ...e, sets: e.sets.map((s) => (!done(s) && (s.reps ?? 0) > 0 ? { ...s, completed: true, completedAt: at } : s)) })),
+    }));
+    setFinishAsk(false);
     w.finish();
   };
 
@@ -141,9 +153,9 @@ function LiveWorkout({ a }: { a: ActiveWorkout }) {
           <IconPlus size={18} /> Add exercise
         </button>
 
-        {confirm === 'discard' || confirm === 'empty' ? (
+        {confirm === 'discard' ? (
           <div className="confirm">
-            <p>{confirm === 'empty' ? 'No sets are checked off yet. Discard this workout?' : 'Discard this workout? Logged sets will be lost.'}</p>
+            <p>Discard this workout? Logged sets will be lost.</p>
             <div className="confirm__row">
               <button className="btn btn--ghost" onClick={() => setConfirm(null)} type="button">
                 Keep training
@@ -162,6 +174,47 @@ function LiveWorkout({ a }: { a: ActiveWorkout }) {
       </div>
 
       {a.rest && <RestBar a={a} now={now} />}
+
+      {finishAsk && (
+        <div className="finishask" role="alertdialog" aria-modal="true" aria-labelledby="finishask-t" onClick={() => setFinishAsk(false)}>
+          <div className="finishask__card" onClick={(e) => e.stopPropagation()}>
+            {filledUnchecked > 0 ? (
+              <>
+                <h2 id="finishask-t">Finish workout?</h2>
+                <p>
+                  {filledUnchecked} {filledUnchecked === 1 ? 'set has' : 'sets have'} reps entered but {filledUnchecked === 1 ? "isn't" : "aren't"} checked off.
+                </p>
+                <button className="btn btn--primary btn--block" onClick={completeFilledAndFinish} type="button">
+                  Count them and finish
+                </button>
+                {completed > 0 && (
+                  <button
+                    className="btn btn--ghost btn--block"
+                    onClick={() => {
+                      setFinishAsk(false);
+                      w.finish();
+                    }}
+                    type="button"
+                  >
+                    Finish with checked sets only ({completed})
+                  </button>
+                )}
+              </>
+            ) : (
+              <>
+                <h2 id="finishask-t">No sets logged</h2>
+                <p>Enter reps (and weight) for your sets, or tick ✓ on each one, then finish. Or discard this workout.</p>
+                <button className="btn btn--danger btn--block" onClick={w.discard} type="button">
+                  Discard workout
+                </button>
+              </>
+            )}
+            <button className="btn btn--ghost btn--block" onClick={() => setFinishAsk(false)} type="button">
+              Keep training
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
