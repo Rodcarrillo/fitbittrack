@@ -1176,3 +1176,4 @@ html, body { overscroll-behavior-y: none; }
 .finishask__card h2 { font-size: 20px; }
 .finishask__card p { color: var(--muted); margin-bottom: 4px; }
 @media (min-width: 700px) { .finishask { align-items: center; } }
+.diag--ok { color: var(--good); } .diag--bad { color: var(--warn, #e0a33a); text-align: right; max-width: 60%; }

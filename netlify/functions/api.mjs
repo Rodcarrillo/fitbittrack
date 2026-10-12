@@ -31,7 +31,7 @@ const GOOGLE_SCOPES = [
   'https://www.googleapis.com/auth/googlehealth.settings.readonly', // paired devices + battery
 ];
 const ALLOWED_TYPES = new Set([
-  'sleep', 'exercise', 'steps', 'total-calories', 'weight', 'height',
+  'sleep', 'exercise', 'steps', 'total-calories', 'weight', 'height', 'body-fat', 'oxygen-saturation', 'respiratory-rate-sleep-summary', 'vo2-max', 'run-vo2-max', 'heart-rate-variability',
   'daily-resting-heart-rate', 'daily-heart-rate-variability', 'daily-respiratory-rate',
   'daily-oxygen-saturation', 'daily-sleep-temperature-derivations', 'daily-vo2-max', 'daily-heart-rate-zones',
 ]);

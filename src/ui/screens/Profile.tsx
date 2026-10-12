@@ -70,6 +70,8 @@ export function ProfileScreen() {
 
         <BodyCard />
 
+        {ds.source.diagnostics && <DataCheck diag={ds.source.diagnostics} fetchedAt={ds.source.fetchedAt} />}
+
         <section className="card pcard">
           <div className="eyebrow">Goals</div>
           <Row label="Daily steps" value={fmtNum(p.stepGoal)} />
@@ -248,6 +250,44 @@ function BodyCard() {
           <p className="fine">{manual ? 'Edited by you. Used for Fitbit Age, calories context and the coach.' : 'From Google Health when available. Tap Edit to set or correct it.'}</p>
         </>
       )}
+    </section>
+  );
+}
+
+const DIAG_LABEL: Record<string, string> = {
+  sleep: 'Sleep',
+  restingHr: 'Resting heart rate',
+  hrv: 'HRV',
+  respiratoryRate: 'Respiratory rate',
+  spo2: 'SpO₂',
+  skinTempDelta: 'Skin temperature',
+  steps: 'Steps',
+  calories: 'Calories',
+  weightKg: 'Weight',
+  vo2max: 'VO₂ max',
+  exercise: 'Exercise',
+  devices: 'Band & battery',
+  profile: 'Profile',
+  height: 'Height',
+};
+
+/** What came back from Google Health for each data type, so gaps are visible instead of silent. */
+function DataCheck({ diag, fetchedAt }: { diag: Record<string, string>; fetchedAt: string }) {
+  const keys = Object.keys(DIAG_LABEL).filter((k) => k in diag);
+  return (
+    <section className="card pcard">
+      <div className="eyebrow">Data check · Google Health</div>
+      {keys.map((k) => {
+        const v = diag[k];
+        const bad = /error|no data|no values|^0 /.test(v);
+        return (
+          <div className="prow" key={k}>
+            <span className="prow__label">{DIAG_LABEL[k]}</span>
+            <span className={`fine ${bad ? 'diag--bad' : 'diag--ok'}`}>{v}</span>
+          </div>
+        );
+      })}
+      <p className="fine">Loaded {new Date(fetchedAt).toLocaleString()}. "error 403" means Google didn't grant that permission: reconnect and tick every box.</p>
     </section>
   );
 }

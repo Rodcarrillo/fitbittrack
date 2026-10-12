@@ -129,7 +129,7 @@ export interface JournalEntry {
 
 /** Everything a provider returns. History is ascending by date. */
 export interface HealthDataset {
-  source: { id: string; label: string; isSample: boolean; fetchedAt: ISODateTime };
+  source: { id: string; label: string; isSample: boolean; fetchedAt: ISODateTime; diagnostics?: Record<string, string> };
   profile: UserProfile;
   devices: DeviceInfo[];
   today: ISODate;

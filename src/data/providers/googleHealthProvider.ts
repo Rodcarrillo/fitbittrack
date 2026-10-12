@@ -3,7 +3,8 @@ import { addDays, fmtISO } from '../../calc/stats';
 import { api } from '../../auth/session';
 import { generateSampleDataset } from './mockProvider';
 import type { HealthDataProvider } from './types';
-import { mapExercise, mapSleep, mergeDaily, rollupToMap, type GHExercisePoint, type GHSleepPoint } from './googleHealthMappers';
+import { mapExercise, mapSleep, mergeDaily, type GHExercisePoint, type GHSleepPoint } from './googleHealthMappers';
+import { loadDailySeries } from './googleHealthDaily';
 
 /**
  * Google Health API provider (the successor of the Fitbit Web API, which was turned down
@@ -14,19 +15,6 @@ import { mapExercise, mapSleep, mergeDaily, rollupToMap, type GHExercisePoint, t
  * stores the encrypted refresh token server-side and proxies an allow-listed set of
  * read-only Google Health API calls. Session = httpOnly, Secure, SameSite cookie.
  */
-
-/** Data type id (path, kebab-case) → where the value lives in a dailyRollUp point. */
-const DAILY_TYPES = {
-  restingHr: { type: 'daily-resting-heart-rate', path: ['dailyRestingHeartRate', 'beatsPerMinute'] },
-  hrv: { type: 'daily-heart-rate-variability', path: ['dailyHeartRateVariability', 'averageHeartRateVariabilityMilliseconds'] },
-  respiratoryRate: { type: 'daily-respiratory-rate', path: ['dailyRespiratoryRate', 'breathsPerMinute'] },
-  spo2: { type: 'daily-oxygen-saturation', path: ['dailyOxygenSaturation', 'averagePercentage'] },
-  skinTempDelta: { type: 'daily-sleep-temperature-derivations', path: ['dailySleepTemperatureDerivations', 'nightlyTemperatureCelsiusDelta'] },
-  steps: { type: 'steps', path: ['steps', 'countSum'] },
-  calories: { type: 'total-calories', path: ['totalCalories', 'kcalSum'] },
-  weightKg: { type: 'weight', path: ['weight', 'weightKgAvg'] },
-  vo2max: { type: 'daily-vo2-max', path: ['dailyVo2Max', 'vo2Max'] },
-} as const;
 
 /** Google sends int64 numbers as strings. */
 const n = (v: unknown): number | null => {
@@ -44,14 +32,6 @@ async function listAll<T>(dataType: string, filter: string): Promise<T[]> {
     pageToken = res.nextPageToken;
   } while (pageToken);
   return out;
-}
-
-async function dailyRollUp(dataType: string, start: ISODate, end: ISODate) {
-  const res = await api<{ rollupDataPoints?: Record<string, unknown>[] }>(`/api/health/${dataType}/dailyRollUp`, {
-    method: 'POST',
-    body: JSON.stringify({ range: { start, end }, windowSizeDays: 1 }),
-  });
-  return res.rollupDataPoints ?? [];
 }
 
 export class GoogleHealthProvider implements HealthDataProvider {
@@ -83,24 +63,32 @@ export class GoogleHealthProvider implements HealthDataProvider {
       return { ...sample, source: { ...sample.source, label: 'Sample data · connect Google Health' } };
     }
     const today = fmtISO(new Date());
-    const start = addDays(today, -((opts.days ?? 400) - 1));
+    const start = addDays(today, -((opts.days ?? 120) - 1));
     const dates: ISODate[] = [];
     for (let d = start; d <= today; d = addDays(d, 1)) dates.push(d);
 
-    const [profile, devices, heightRaw, sleepRaw, exerciseRaw, ...daily] = await Promise.all([
-      api<any>('/api/profile').catch(() => null),
-      api<any>('/api/devices').catch(() => null),
-      api<{ dataPoints?: any[] }>('/api/health/height/dataPoints?pageSize=5').catch(() => null),
-      listAll<GHSleepPoint>('sleep', `sleep.interval.civil_end_time >= "${start}"`).catch(() => null),
-      listAll<GHExercisePoint>('exercise', `exercise.interval.civil_start_time >= "${start}"`).catch(() => null),
-      ...Object.values(DAILY_TYPES).map((t) => dailyRollUp(t.type, start, today).catch(() => null)),
+    const diag: Record<string, string> = {};
+    const track = <T,>(key: string, pr: Promise<T>, describe: (v: T) => string): Promise<T | null> =>
+      pr.then(
+        (v) => {
+          diag[key] = describe(v);
+          return v;
+        },
+        (e) => {
+          diag[key] = e?.status ? `error ${e.status}` : 'error';
+          return null;
+        },
+      );
+    const [profile, devices, heightRaw, sleepRaw, exerciseRaw, daily] = await Promise.all([
+      track('profile', api<any>('/api/profile'), (v) => (v?.age ? `age ${v.age}` : 'ok')),
+      track('devices', api<any>('/api/devices'), (v) => `${v?.pairedDevices?.length ?? 0} devices${v?.pairedDevices?.[0] ? ` · battery ${v.pairedDevices[0].batteryLevel ?? v.pairedDevices[0].batteryStatus ?? '?'}` : ''}`),
+      track('height', api<{ dataPoints?: any[] }>('/api/health/height/dataPoints?pageSize=5'), (v) => `${v?.dataPoints?.length ?? 0} points`),
+      track('sleep', listAll<GHSleepPoint>('sleep', `sleep.interval.civil_end_time >= "${start}"`), (v) => `${v.length} nights`),
+      track('exercise', listAll<GHExercisePoint>('exercise', `exercise.interval.civil_start_time >= "${start}"`), (v) => `${v.length} sessions`),
+      loadDailySeries(start, today),
     ]);
-
-    const keys = Object.keys(DAILY_TYPES) as (keyof typeof DAILY_TYPES)[];
-    const series: Record<string, Map<ISODate, number>> = {};
-    keys.forEach((k, i) => {
-      if (daily[i]) series[k] = rollupToMap(daily[i] as any[], [...DAILY_TYPES[k].path]);
-    });
+    Object.assign(diag, daily?.diag ?? {});
+    const series: Record<string, Map<ISODate, number>> = (daily?.series ?? {}) as any;
 
     const sleep = sleepRaw ? mapSleep(sleepRaw) : [];
     // Profile only carries age; body size comes from the weight/height data types.
@@ -141,7 +129,7 @@ export class GoogleHealthProvider implements HealthDataProvider {
     };
 
     return {
-      source: { id: this.id, label: this.label, isSample: false, fetchedAt: new Date().toISOString() },
+      source: { id: this.id, label: this.label, isSample: false, fetchedAt: new Date().toISOString(), diagnostics: diag },
       profile: {
         name: profile?.displayName ?? 'there',
         age: n(profile?.age) ?? 30,
