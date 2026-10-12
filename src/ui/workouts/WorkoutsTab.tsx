@@ -1,7 +1,8 @@
 import React from 'react';
 import { useWorkouts, type WorkoutView } from '../../workouts/store';
 import { LoadView } from '../screens/Train';
-import { WorkoutsHome } from './Home';
+import { LogView } from './Log';
+import { AnalysisView } from './Analysis';
 import { RoutinesView, RoutineEditor } from './Routines';
 import { HistoryView, WorkoutDetail } from './History';
 import { ExercisesView, ExerciseDetail } from './Exercises';
@@ -9,11 +10,12 @@ import { PRsView } from './PRs';
 import { HevyPage } from './Hevy';
 
 const VIEWS: { v: WorkoutView; label: string }[] = [
-  { v: 'home', label: 'Workouts' },
-  { v: 'routines', label: 'Routines' },
+  { v: 'home', label: 'Log' },
+  { v: 'analysis', label: 'Gym analysis' },
   { v: 'history', label: 'History' },
-  { v: 'exercises', label: 'Exercises' },
   { v: 'prs', label: 'PRs' },
+  { v: 'exercises', label: 'Exercises' },
+  { v: 'routines', label: 'Routines' },
   { v: 'load', label: 'Load' },
 ];
 
@@ -48,7 +50,8 @@ export function TrainScreen() {
         <div className="sk sk--card" style={{ height: 220 }} />
       ) : (
         <div className="wview" key={view}>
-          {view === 'home' && <WorkoutsHome />}
+          {view === 'home' && <LogView />}
+          {view === 'analysis' && <AnalysisView />}
           {view === 'routines' && <RoutinesView />}
           {view === 'history' && <HistoryView />}
           {view === 'exercises' && <ExercisesView />}

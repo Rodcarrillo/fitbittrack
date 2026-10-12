@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import type { ActiveWorkout, ExerciseDef, Routine, Workout, WorkoutData, WorkoutExercise, WorkoutSet } from './types';
+import type { ActiveWorkout, ActivitySession, ExerciseDef, LiveSession, Routine, SessionKind, Workout, WorkoutData, WorkoutExercise, WorkoutSet } from './types';
 import { EXERCISE_LIBRARY } from './library';
 import { ROTATION, seedData } from './seed';
 import { detectPRs, done, intensityStars, matchFitbit, previousSets, uid } from './calc';
@@ -26,6 +26,7 @@ export interface WorkoutRepository {
 const SERVER_MODE = (import.meta as any).env?.VITE_DATA_PROVIDER === 'google';
 const KEY = () => scoped('workouts:v1');
 const ACTIVE_KEY = () => scoped('active-workout:v1');
+const LIVE_KEY = () => scoped('live-session:v1');
 
 export const localRepository: WorkoutRepository = {
   load() {
@@ -61,7 +62,7 @@ export const localRepository: WorkoutRepository = {
   },
 };
 
-export type WorkoutView = 'home' | 'routines' | 'history' | 'exercises' | 'prs' | 'load';
+export type WorkoutView = 'home' | 'analysis' | 'routines' | 'history' | 'exercises' | 'prs' | 'load';
 export type WorkoutPage = { kind: 'routine'; id: string | null } | { kind: 'workout'; id: string } | { kind: 'exercise'; id: string } | { kind: 'hevy' };
 
 export interface HevySyncResult {
@@ -125,6 +126,16 @@ interface Ctx {
   disconnectHevy: () => Promise<void>;
   syncHevy: () => Promise<HevySyncResult | null>;
   /** Free path: import a Hevy CSV export. */
+  // Log exercise (timer sessions)
+  live: LiveSession | null;
+  sessionOpen: boolean;
+  setSessionOpen: (v: boolean) => void;
+  startSession: (kind: SessionKind, name: string) => void;
+  toggleSessionPause: () => void;
+  finishSession: (notes?: string) => ActivitySession | null;
+  discardSession: () => void;
+  deleteSession: (id: string) => void;
+  sessionElapsed: (l: LiveSession, now: number) => number;
   importHevyCsv: (text: string) => { added: number; updated: number; newExercises: number; routines: number };
   setHevyAutoExport: (on: boolean) => void;
 }
@@ -396,6 +407,58 @@ export function WorkoutProvider({ children, repo = localRepository }: { children
           ? "The FITBITRACK server couldn't reach Hevy. On a free PythonAnywhere account, api.hevyapp.com has to be added to their allow-list first (see the setup guide)."
           : "Couldn't reach the FITBITRACK server. Hevy sync runs through the backend (see the setup guide).";
 
+  const [live, setLive] = useState<LiveSession | null>(() => {
+    try {
+      const v = localStorage.getItem(LIVE_KEY());
+      return v ? (JSON.parse(v) as LiveSession) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [sessionOpen, setSessionOpen] = useState(false);
+  const saveLive = (l: LiveSession | null) => {
+    setLive(l);
+    try {
+      if (l) localStorage.setItem(LIVE_KEY(), JSON.stringify(l));
+      else localStorage.removeItem(LIVE_KEY());
+    } catch {
+      /* ignore */
+    }
+  };
+  const sessionElapsed = (l: LiveSession, now: number) => Math.max(0, ((l.pausedAt ?? now) - new Date(l.startedAt).getTime() - l.pausedTotalMs) / 1000);
+  const startSession = (kind: SessionKind, name: string) => {
+    if (live) return;
+    saveLive({ id: `s-${uid()}`, kind, name, startedAt: new Date().toISOString(), pausedAt: null, pausedTotalMs: 0 });
+    setSessionOpen(true);
+    haptic(15);
+  };
+  const toggleSessionPause = () => {
+    if (!live) return;
+    const now = Date.now();
+    saveLive(live.pausedAt ? { ...live, pausedAt: null, pausedTotalMs: live.pausedTotalMs + (now - live.pausedAt) } : { ...live, pausedAt: now });
+    haptic();
+  };
+  const finishSession = (notes?: string) => {
+    if (!live) return null;
+    const now = Date.now();
+    const s: ActivitySession = {
+      id: live.id,
+      kind: live.kind,
+      name: live.name,
+      date: fmtISO(new Date(live.startedAt)),
+      startedAt: live.startedAt,
+      endedAt: new Date(live.pausedAt ?? now).toISOString(),
+      durationSec: Math.round(sessionElapsed(live, now)),
+      notes: notes?.trim() || undefined,
+    };
+    commit((d) => ({ ...d, sessions: [...(d.sessions ?? []).filter((x) => x.id !== s.id), s].sort((a, b) => a.startedAt.localeCompare(b.startedAt)) }));
+    saveLive(null);
+    haptic(25);
+    return s;
+  };
+  const discardSession = () => saveLive(null);
+  const deleteSession = (id: string) => commit((d) => ({ ...d, sessions: (d.sessions ?? []).filter((x) => x.id !== id) }));
+
   const importHevyCsv = (text: string) => {
     const d0 = dataRef.current;
     if (!d0) throw new Error('Workouts are still loading. Try again in a second.');
@@ -443,7 +506,7 @@ export function WorkoutProvider({ children, repo = localRepository }: { children
       else routines.push(r);
       routineCount++;
     }
-    const next = { ...d0, history, customExercises: customs, routines };
+    const next = { ...d0, history, customExercises: customs, routines, lastCsvImport: new Date().toISOString() };
     dataRef.current = next;
     setData(next);
     repo.save(next);
@@ -602,6 +665,15 @@ export function WorkoutProvider({ children, repo = localRepository }: { children
     disconnectHevy,
     syncHevy,
     importHevyCsv,
+    live,
+    sessionOpen,
+    setSessionOpen,
+    startSession,
+    toggleSessionPause,
+    finishSession,
+    discardSession,
+    deleteSession,
+    sessionElapsed,
     setHevyAutoExport,
   };
   return <WCtx.Provider value={value}>{children}</WCtx.Provider>;

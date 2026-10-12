@@ -1,3 +1,4 @@
+import { LiveSessionScreen, SessionMiniBar } from './Log';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNow, useWorkouts } from '../../workouts/store';
 import { done, fmtClockDuration, fmtKg, previousSets, records, setBeatsRecords, workoutSets, workoutVolume, PR_LABEL, fmtShortDuration } from '../../workouts/calc';
@@ -11,12 +12,14 @@ import { haptic, useApp } from '../../state/store';
 
 /** Everything that floats above the app for training: live workout, mini bar, summary, picker. */
 export function ActiveWorkoutLayer() {
-  const { active, summary } = useWorkouts();
+  const { active, summary, live, sessionOpen } = useWorkouts();
   return (
     <>
       {active && !active.minimized && !summary && <LiveWorkout a={active} />}
       {active && active.minimized && !summary && <MiniBar a={active} />}
       {summary && <Summary />}
+      {live && sessionOpen && <LiveSessionScreen />}
+      {live && !sessionOpen && !active && <SessionMiniBar />}
       <ExercisePicker />
     </>
   );

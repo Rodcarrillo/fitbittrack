@@ -1177,3 +1177,47 @@ html, body { overscroll-behavior-y: none; }
 .finishask__card p { color: var(--muted); margin-bottom: 4px; }
 @media (min-width: 700px) { .finishask { align-items: center; } }
 .diag--ok { color: var(--good); } .diag--bad { color: var(--warn, #e0a33a); text-align: right; max-width: 60%; }
+
+/* ---------------- Log exercise (timer) ---------------- */
+.logstart { display: flex; flex-direction: column; gap: 12px; }
+.kindgrid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+.kindbtn { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 4px; border-radius: 14px; border: 1px solid var(--line); background: var(--card); color: var(--muted); font-size: 11.5px; font-weight: 600; }
+.kindbtn.is-on { color: var(--fg); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--card)); }
+.kindbtn.is-on svg { color: var(--accent); }
+.chip.is-on { border-color: var(--accent); color: var(--fg); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.sessrow { padding: 0; overflow: hidden; }
+.sessrow__main { width: 100%; display: flex; align-items: center; gap: 12px; padding: 14px; text-align: left; }
+.sessrow__icon { width: 40px; height: 40px; flex: none; border-radius: 12px; display: grid; place-items: center; background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+.sessrow__body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.sessrow__fb { display: flex; flex-direction: column; align-items: flex-end; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.sessrow__fb b { color: var(--fg); font-size: 15px; }
+.sessrow__detail { padding: 0 14px 14px; display: flex; flex-direction: column; gap: 10px; }
+.lv { position: fixed; inset: 0; z-index: 70; background: #000; color: #fff; display: flex; flex-direction: column; padding: env(safe-area-inset-top, 0px) 16px calc(20px + env(safe-area-inset-bottom, 0px)); animation: sheetUp 0.3s var(--ease) both; }
+.lv .icon-btn { color: #fff; }
+.lv__top { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; }
+.lv__kind { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; color: #b9f27c; }
+.lv__center { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
+.lv__time { font-size: clamp(64px, 22vw, 120px); font-weight: 600; letter-spacing: -0.04em; color: #e9ff3a; line-height: 1; }
+.lv__time.is-paused { opacity: 0.45; }
+.lv__sub { color: rgba(255, 255, 255, 0.6); font-size: 14px; }
+.lv__metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: 100%; max-width: 460px; margin-top: 28px; }
+.lv__metrics > div { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 12px 6px; border-radius: 16px; background: rgba(255, 255, 255, 0.07); text-align: center; }
+.lv__metrics .eyebrow { color: rgba(255, 255, 255, 0.55); font-size: 10px; }
+.lv__metrics b { font-size: 26px; }
+.lv__metrics .fine { color: rgba(255, 255, 255, 0.45); font-size: 11px; }
+.lv__actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; max-width: 460px; width: 100%; margin: 0 auto; }
+.lv__btn { height: 64px; border-radius: 999px; font-size: 18px; font-weight: 700; }
+.lv__btn--pause { background: rgba(233, 255, 58, 0.16); color: #e9ff3a; }
+.lv__btn--end { background: rgba(255, 82, 82, 0.18); color: #ff6b6b; }
+
+/* ---------------- Gym analysis ---------------- */
+.hevyup { display: flex; flex-direction: column; gap: 8px; }
+.hevyup__row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.hevyup label.btn { cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.delta { font-size: 12px; font-weight: 700; color: var(--muted); }
+.delta--up { color: var(--good); }
+.delta--down { color: var(--bad); }
+.liftrow { display: flex; align-items: center; gap: 12px; text-align: left; width: 100%; }
+.liftrow__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.liftrow__spark { width: 90px; flex: none; }
+@media (max-width: 380px) { .kindgrid { grid-template-columns: repeat(4, 1fr); } .liftrow__spark { width: 64px; } }

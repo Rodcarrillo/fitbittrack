@@ -97,6 +97,27 @@ export interface ActiveWorkout {
   minimized: boolean;
 }
 
+/** "Log exercise": a timed session (Apple Watch style). HR and calories come from Fitbit afterwards. */
+export type SessionKind = 'gym' | 'run' | 'walk' | 'bike' | 'basketball' | 'football' | 'hiit' | 'yoga' | 'swim' | 'other';
+export interface ActivitySession {
+  id: string;
+  kind: SessionKind;
+  name: string;
+  date: ISODate;
+  startedAt: string;
+  endedAt: string;
+  durationSec: number;
+  notes?: string;
+}
+export interface LiveSession {
+  id: string;
+  kind: SessionKind;
+  name: string;
+  startedAt: string;
+  pausedAt: number | null;
+  pausedTotalMs: number;
+}
+
 export interface WorkoutData {
   version: 1;
   routines: Routine[];
@@ -106,6 +127,8 @@ export interface WorkoutData {
   exercisePrefs: Record<string, { notes?: string; restSec?: number }>;
   seeded: boolean;
   hevy?: import('../integrations/hevy').HevyState & { connectedAt?: string };
+  sessions?: ActivitySession[];
+  lastCsvImport?: string;
 }
 
 export const MUSCLE_LABEL: Record<Muscle, string> = {

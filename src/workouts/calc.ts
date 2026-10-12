@@ -1,4 +1,4 @@
-import type { Exercise as FitbitExercise, HealthDataset, ISODate } from '../domain/types';
+import type { Exercise as FitbitExercise, HealthDataset, HrZoneMinutes, ISODate } from '../domain/types';
 import type { ExerciseDef, Muscle, PRHit, Routine, Workout, WorkoutExercise, WorkoutSet } from './types';
 import { addDays, fmtISO, mean, toDate } from '../calc/stats';
 
@@ -293,3 +293,112 @@ export function matchFitbit(ds: HealthDataset | null, w: Pick<Workout, 'date' | 
 }
 
 export const todayISO = () => fmtISO(new Date());
+
+/* ---------------- logged sessions (timer) ↔ Fitbit ---------------- */
+
+export interface SessionFitbit extends FitbitMatch {
+  durationMin: number;
+  zones: HrZoneMinutes | null;
+}
+
+/** Fitbit exercise overlapping a timed session (any activity type). */
+export function matchFitbitSession(ds: HealthDataset | null, s: { date: ISODate; startedAt: string; durationSec: number }): SessionFitbit | null {
+  if (!ds) return null;
+  const start = new Date(s.startedAt).getTime();
+  const end = start + s.durationSec * 1000;
+  let best: FitbitExercise | null = null;
+  let bestScore = -Infinity;
+  for (const e of ds.exercises) {
+    const es = new Date(e.start).getTime();
+    const ee = es + e.durationMin * 60000;
+    const overlap = Math.min(end, ee) - Math.max(start, es);
+    const gap = Math.abs(es - start);
+    if (overlap <= 0 && gap > 30 * 60000) continue;
+    const score = overlap - gap;
+    if (score > bestScore) {
+      best = e;
+      bestScore = score;
+    }
+  }
+  if (!best) return null;
+  const z = best.zones;
+  return {
+    name: best.name,
+    avgHr: best.avgHr,
+    maxHr: best.maxHr,
+    calories: best.calories,
+    azm: z ? z.z3 + 2 * (z.z4 + z.z5) + Math.round(z.z2 * 0.5) : null,
+    durationMin: best.durationMin,
+    zones: z,
+  };
+}
+
+/* ---------------- gym analysis ---------------- */
+
+/** Best e1RM per session for one exercise, oldest first. */
+export function e1rmSeries(history: Workout[], exerciseId: string, from: ISODate) {
+  const out: { date: ISODate; e1rm: number; top: { weight: number; reps: number } }[] = [];
+  for (const w of history) {
+    if (w.date < from) continue;
+    for (const e of w.exercises) {
+      if (e.exerciseId !== exerciseId) continue;
+      let best: { v: number; weight: number; reps: number } | null = null;
+      for (const s of e.sets.filter(done)) {
+        const v = e1rm(s.weight ?? 0, s.reps ?? 0);
+        if (v > 0 && (!best || v > best.v)) best = { v, weight: s.weight ?? 0, reps: s.reps ?? 0 };
+      }
+      if (best) out.push({ date: w.date, e1rm: Math.round(best.v * 10) / 10, top: { weight: best.weight, reps: best.reps } });
+    }
+  }
+  return out;
+}
+
+/** Most trained loaded lifts in a period, with their e1RM change (first vs last 3 sessions). */
+export function liftProgress(history: Workout[], defs: Map<string, ExerciseDef>, from: ISODate, n = 6) {
+  const count = new Map<string, number>();
+  history.filter((w) => w.date >= from).forEach((w) => w.exercises.forEach((e) => e.sets.some(done) && count.set(e.exerciseId, (count.get(e.exerciseId) ?? 0) + 1)));
+  return [...count.entries()]
+    .filter(([id, c]) => c >= 3 && (defs.get(id)?.equipment ?? '') !== 'bodyweight')
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, n)
+    .map(([id, sessions]) => {
+      const series = e1rmSeries(history, id, from);
+      const avg = (xs: typeof series) => xs.reduce((a, x) => a + x.e1rm, 0) / Math.max(1, xs.length);
+      const first = avg(series.slice(0, 3));
+      const last = avg(series.slice(-3));
+      const best = series.reduce((m, x) => (x.e1rm > m.e1rm ? x : m), series[0]);
+      return { id, name: defs.get(id)?.name ?? id, sessions, series, changePct: first > 0 ? ((last - first) / first) * 100 : 0, best };
+    });
+}
+
+/** PRs set in the period, newest first, one line per exercise + kind. */
+export function recentPRs(history: Workout[], from: ISODate) {
+  const out: { date: ISODate; exerciseId: string; kind: PRHit['kind']; weight: number; reps: number; value: number; workout: string }[] = [];
+  for (let i = history.length - 1; i >= 0; i--) {
+    const w = history[i];
+    if (w.date < from) break;
+    for (const p of w.prs) out.push({ date: w.date, exerciseId: p.exerciseId, kind: p.kind, weight: p.weight, reps: p.reps, value: p.value, workout: w.name });
+  }
+  return out;
+}
+
+/** Per routine (by workout name): how often, last time, average volume, and volume trend. */
+export function routineStats(history: Workout[], routines: Routine[]) {
+  return routines.map((r) => {
+    const runs = history.filter((w) => w.routineId === r.id || w.name.trim().toLowerCase() === r.name.trim().toLowerCase());
+    const vols = runs.map((w) => workoutVolume(w));
+    const avgVol = vols.length ? vols.reduce((a, b) => a + b, 0) / vols.length : 0;
+    const recent = vols.slice(-4);
+    const older = vols.slice(-8, -4);
+    const m = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
+    return {
+      routine: r,
+      times: runs.length,
+      last: runs[runs.length - 1]?.date ?? null,
+      avgVol,
+      avgMin: runs.length ? runs.reduce((a, w) => a + w.durationSec, 0) / runs.length / 60 : 0,
+      trendPct: m(older) > 0 ? ((m(recent) - m(older)) / m(older)) * 100 : null,
+      volumes: vols.slice(-12),
+    };
+  });
+}

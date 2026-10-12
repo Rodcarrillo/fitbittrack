@@ -1,44 +1,35 @@
 import React, { useState } from 'react';
 import { useWorkouts } from '../../workouts/store';
-import { estimateRoutineMin, uid } from '../../workouts/calc';
+import { estimateRoutineMin, routineStats, uid } from '../../workouts/calc';
+import { Sparkline } from '../components/Charts';
 import type { Routine } from '../../workouts/types';
 import { MUSCLE_LABEL } from '../../workouts/types';
 import { BackBar } from './WorkoutsTab';
 import { IconPlus, IconTrash } from '../components/Icons';
 
 export function RoutinesView() {
-  const { data, defs, start, openPage, active } = useWorkouts();
+  const { data, defs } = useWorkouts();
   if (!data) return null;
+  const stats = routineStats(data.history, data.routines);
+  if (!stats.length) return <div className="na-block">Upload your Hevy CSV in Gym analysis: workouts you repeat (Push, Pull…) show up here as routines.</div>;
   return (
     <div className="wk">
-      <div className="row-between">
-        <p className="fine">{data.routines.length} routines · saved on this device</p>
-        <button className="btn btn--ghost btn--sm" onClick={() => openPage({ kind: 'routine', id: null })} type="button">
-          <IconPlus size={16} /> New routine
-        </button>
-      </div>
+      <p className="fine">Built from your Hevy history. Each card shows how often you do it and how its total weight is trending.</p>
       <div className="routine-grid">
-        {data.routines.map((r) => (
+        {stats.map(({ routine: r, times, last, avgVol, avgMin, trendPct, volumes }) => (
           <article key={r.id} className="card routine">
-            <button className="routine__head" onClick={() => openPage({ kind: 'routine', id: r.id })} type="button">
+            <div className="row-between">
               <h3>{r.name}</h3>
-              <span className="fine">
-                {r.items.length} exercises · ~{estimateRoutineMin(r)} min
-              </span>
-            </button>
-            <p className="routine__list">{r.items.map((it) => defs.get(it.exerciseId)?.name ?? it.exerciseId).join(' · ')}</p>
-            <div className="routine__actions">
-              <button className="btn btn--primary btn--sm" onClick={() => start(r.id)} type="button" disabled={!!active}>
-                Start
-              </button>
-              <button className="btn btn--ghost btn--sm" onClick={() => openPage({ kind: 'routine', id: r.id })} type="button">
-                Edit
-              </button>
+              {trendPct != null && <span className={`delta ${trendPct > 1 ? 'delta--up' : trendPct < -1 ? 'delta--down' : ''}`}>{trendPct > 0 ? '↑' : trendPct < 0 ? '↓' : ''} {Math.abs(Math.round(trendPct))}%</span>}
             </div>
+            <span className="fine">
+              {times}× done · last {last ? new Date(last + 'T12:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'} · ~{Math.round(avgMin)} min · avg {Math.round(avgVol).toLocaleString('en-US')} kg
+            </span>
+            <Sparkline values={volumes} color="var(--accent)" height={30} />
+            <p className="routine__list">{r.items.map((it) => `${it.sets}× ${defs.get(it.exerciseId)?.name ?? it.exerciseId}`).join(' · ')}</p>
           </article>
         ))}
       </div>
-      {active && <p className="fine">Finish or discard the workout in progress to start another routine.</p>}
     </div>
   );
 }
