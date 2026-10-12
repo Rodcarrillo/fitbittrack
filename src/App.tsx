@@ -9,6 +9,7 @@ import { TrendsScreen } from './ui/screens/Trends';
 import { ProfileScreen } from './ui/screens/Profile';
 import { Sheets } from './ui/screens/Sheets';
 import { BandIcon, Splash, Wordmark } from './ui/components/Logo';
+import { estimateBattery } from './insights/battery';
 import { WorkoutProvider } from './workouts/store';
 import { ActiveWorkoutLayer } from './ui/workouts/ActiveWorkout';
 import { IconAuto, IconMoon, IconSun, IconDumbbell, IconHeart, IconProfile, IconRefresh, IconSpark, IconToday, IconTrends } from './ui/components/Icons';
@@ -71,6 +72,7 @@ function Shell() {
   const nextTheme = theme === 'auto' ? 'light' : theme === 'light' ? 'dark' : 'auto';
   const pull = usePullToRefresh(refresh);
   const device = raw?.devices[0];
+  const batteryNow = device ? estimateBattery(device)?.level ?? null : null;
 
   useEffect(() => {
     window.scrollTo({ top: 0 });
@@ -95,13 +97,13 @@ function Shell() {
           <IconSpark size={16} /> Ask FITBITRACK
         </button>
         {device && (
-          <div className="sidebar__device">
+          <button className="sidebar__device" onClick={() => openSheet('battery')} type="button">
             <BandIcon size={22} />
             <span>
               {device.name}
-              <span className="fine">{device.battery != null ? `${device.battery}% battery` : 'Battery —'}</span>
+              <span className="fine">{device.battery != null ? `${batteryNow ?? device.battery}% battery` : 'Battery —'}</span>
             </span>
-          </div>
+          </button>
         )}
       </aside>
 
@@ -115,10 +117,10 @@ function Shell() {
               </button>
             )}
             {(device || (raw && !raw.source.isSample)) && (
-              <span className="battery" title={device ? `${device.name} battery` : 'Reconnect Google Health to see your band battery'}>
-                <span className="num">{device?.battery != null ? `${device.battery}%` : '—'}</span>
+              <button className="battery" onClick={() => openSheet('battery')} aria-label="Band battery" type="button">
+                <span className="num">{device?.battery != null ? `${batteryNow ?? device.battery}%` : '—'}</span>
                 <BandIcon size={20} />
-              </span>
+              </button>
             )}
             <button className="icon-btn theme-btn" onClick={() => setTheme(nextTheme)} aria-label={`Appearance: ${theme}. Switch to ${nextTheme}`} title={`Appearance: ${theme === 'auto' ? 'Auto (device)' : theme}`} type="button">
               {theme === 'light' ? <IconSun size={18} /> : theme === 'dark' ? <IconMoon size={18} /> : <IconAuto size={18} />}

@@ -7,6 +7,8 @@ import { LocalCoach, SUGGESTED_QUESTIONS, askGemini, buildCoachContext, type Coa
 import { useWorkouts } from '../../workouts/store';
 import { EXERCISE_LIBRARY } from '../../workouts/library';
 import { SERVER_MODE } from '../../data/cloudSync';
+import { estimateBattery, fmtHoursLeft, typicalHours } from '../../insights/battery';
+import { BandIcon } from '../components/Logo';
 import { MIN_SAMPLES, TAG_LABEL } from '../../insights/engine';
 import { GOOGLE_HEALTH_SCOPES } from '../../auth/session';
 import type { JournalTag } from '../../domain/types';
@@ -22,7 +24,7 @@ export function Sheets() {
     return () => window.removeEventListener('keydown', onKey);
   }, [sheet, openSheet]);
   if (!sheet) return null;
-  const title = { insights: 'Insights', coach: 'FITBITRACK Coach', journal: 'Journal', connect: 'Connect your Fitbit', privacy: 'Privacy' }[sheet];
+  const title = { insights: 'Insights', coach: 'FITBITRACK Coach', journal: 'Journal', connect: 'Connect your Fitbit', privacy: 'Privacy', battery: 'Band battery' }[sheet];
   return (
     <div className="sheet-wrap" onClick={() => openSheet(null)}>
       <div className="sheet" role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()} ref={ref} tabIndex={-1}>
@@ -39,6 +41,7 @@ export function Sheets() {
           {sheet === 'journal' && <JournalSheet />}
           {sheet === 'connect' && <ConnectSheet />}
           {sheet === 'privacy' && <PrivacySheet />}
+          {sheet === 'battery' && <BatterySheet />}
         </div>
       </div>
     </div>
@@ -299,6 +302,69 @@ function PrivacySheet() {
         <li>You can export everything or delete your account at any time from Profile.</li>
       </ul>
       <p className="fine">FITBITRACK scores and insights describe patterns in your data. They are not a medical device and do not diagnose conditions.</p>
+    </div>
+  );
+}
+
+function BatterySheet() {
+  const { raw } = useApp();
+  const d = raw?.devices[0];
+  const diag = raw?.source.diagnostics?.devices ?? '';
+  if (!d) {
+    const forbidden = /403/.test(diag);
+    return (
+      <div className="battery-sheet">
+        <p>{forbidden ? "Google hasn't given FITBITRACK permission to read your band (devices & settings)." : "Google Health didn't return a paired band yet."}</p>
+        {forbidden ? (
+          <>
+            <ol className="hevy-steps">
+              <li>Tap Reconnect below.</li>
+              <li>
+                On Google's screen, tick <b>every</b> box, including the one about your devices / settings.
+              </li>
+              <li>If that box doesn't appear: Google Cloud → Data access → add <code>googlehealth.settings.readonly</code>, save, and reconnect.</li>
+            </ol>
+            <a className="btn btn--primary btn--block" href="/auth/google/start">
+              Reconnect Google Health
+            </a>
+          </>
+        ) : (
+          <p className="fine">Open the Fitbit app on your phone so the band syncs, then pull down to refresh.</p>
+        )}
+        <p className="fine">Status from Google: {diag || '—'}</p>
+      </div>
+    );
+  }
+  const est = estimateBattery(d);
+  const ago = d.lastSync ? Math.max(1, Math.round((Date.now() - new Date(d.lastSync).getTime()) / 60000)) : null;
+  return (
+    <div className="battery-sheet">
+      <div className="battery-hero">
+        <BandIcon size={40} />
+        <div>
+          <div className="big num">{est ? `${est.level}%` : d.batteryStatus ?? '—'}</div>
+          <div className="fine">{d.name}</div>
+        </div>
+      </div>
+      {est ? (
+        <>
+          <div className="battery-left">
+            <span className="eyebrow">Time left</span>
+            <b>≈ {fmtHoursLeft(est.hoursLeft)}</b>
+          </div>
+          <p className="fine">
+            {est.method === 'measured'
+              ? `Based on how fast your band drained over the last ${Math.round(est.basisHours)} hours (${est.ratePerHour.toFixed(1)}% per hour).`
+              : `Estimate based on the typical battery life of the ${d.name} (~${Math.round(typicalHours(d.name) / 24)} days). It gets personal after a few syncs, as FITBITRACK learns how fast yours drains.`}
+          </p>
+        </>
+      ) : (
+        <p className="fine">Google didn't send a battery level yet.</p>
+      )}
+      <p className="fine">
+        Reported by Google Health at your band's last sync{ago ? ` (${ago < 60 ? `${ago} min` : ago < 1440 ? `${Math.round(ago / 60)} h` : `${Math.round(ago / 1440)} days`} ago)` : ''}
+        {d.battery != null && est && est.level !== d.battery ? `: ${d.battery}% then, ~${est.level}% now` : ''}.
+      </p>
     </div>
   );
 }

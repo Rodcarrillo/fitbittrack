@@ -148,6 +148,7 @@ export class GoogleHealthProvider implements HealthDataProvider {
           id: d.name,
           name: d.deviceVersion ?? d.displayName ?? 'Fitbit device',
           battery: n(d.batteryLevel) ?? ({ HIGH: 90, MEDIUM: 50, LOW: 15, EMPTY: 0 } as Record<string, number>)[String(d.batteryStatus ?? '').toUpperCase()] ?? null,
+          batteryStatus: d.batteryStatus ?? null,
           lastSync: d.lastSyncTime ?? null,
         })),
       today,

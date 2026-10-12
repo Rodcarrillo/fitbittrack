@@ -3,6 +3,7 @@ import type { HealthDataset, JournalEntry, JournalTag, MetricKey } from '../doma
 import { createProvider } from '../data/providers';
 import { scoped, type Account } from '../auth/account';
 import { useCloudSync } from '../data/cloudSync';
+import { recordBattery } from '../insights/battery';
 import { computeAllScores } from '../calc/scores';
 import { analyze, type Analysis } from '../insights/engine';
 
@@ -75,7 +76,7 @@ export type ThemePref = 'auto' | 'light' | 'dark';
 
 export type Tab = 'today' | 'health' | 'train' | 'trends' | 'profile';
 export type HealthView = 'recovery' | 'sleep' | 'age';
-export type Sheet = null | 'insights' | 'coach' | 'journal' | 'connect' | 'privacy';
+export type Sheet = null | 'insights' | 'coach' | 'journal' | 'connect' | 'privacy' | 'battery';
 
 export type BodyOverrides = { age?: number; heightCm?: number; weightKg?: number };
 
@@ -172,6 +173,7 @@ export function AppProvider({ children, account, onLogout }: { children: React.R
     try {
       setError(null);
       const ds = await provider.load();
+      ds.devices.forEach(recordBattery);
       // the signed-in account's name wins over the data source's profile name
       setRaw(account ? { ...ds, profile: { ...ds.profile, name: account.displayName.split(' ')[0] || ds.profile.name } } : ds);
     } catch (e) {

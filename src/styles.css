@@ -1221,3 +1221,16 @@ html, body { overscroll-behavior-y: none; }
 .liftrow__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .liftrow__spark { width: 90px; flex: none; }
 @media (max-width: 380px) { .kindgrid { grid-template-columns: repeat(4, 1fr); } .liftrow__spark { width: 64px; } }
+
+/* top bar: fixed on phones so iOS (incl. iOS 26 Safari's edge blur) always sees a solid bar at the top */
+@media (max-width: 1023px) {
+  .topbar { position: fixed; left: 0; right: 0; top: 0; }
+  .main { padding-top: calc(61px + env(safe-area-inset-top, 0px)); }
+}
+html, body { background-color: var(--bg); }
+button.battery { padding: 4px 2px; border-radius: 10px; }
+.sidebar__device { text-align: left; width: 100%; border-radius: 12px; padding: 8px; }
+.battery-sheet { display: flex; flex-direction: column; gap: 12px; padding-bottom: 8px; }
+.battery-hero { display: flex; align-items: center; gap: 14px; color: var(--fg); }
+.battery-left { display: flex; flex-direction: column; gap: 2px; padding: 14px; border-radius: 16px; background: color-mix(in srgb, var(--accent) 10%, var(--card)); }
+.battery-left b { font-size: 24px; }

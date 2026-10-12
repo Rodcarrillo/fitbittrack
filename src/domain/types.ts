@@ -104,6 +104,8 @@ export interface DeviceInfo {
   id: string;
   name: string;
   battery: number | null;
+  /** Google's coarse level when no % is given: High / Medium / Low / Empty */
+  batteryStatus?: string | null;
   lastSync: ISODateTime | null;
 }
 
