@@ -54,6 +54,22 @@ export function Splash({ ready = true, onDone }: { ready?: boolean; onDone: () =
   const [out, setOut] = useState(false);
   const reduce = useRef(typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches);
 
+  // while the white splash is up, paint the page and the browser/status-bar tint white too
+  useEffect(() => {
+    const html = document.documentElement;
+    const meta = document.querySelector('meta[name="theme-color"]');
+    const prev = meta?.getAttribute('content') ?? null;
+    html.classList.add('is-splash');
+    meta?.setAttribute('content', '#ffffff');
+    return () => {
+      html.classList.remove('is-splash');
+      if (meta && meta.getAttribute('content') === '#ffffff' && prev) {
+        const dark = document.documentElement.getAttribute('data-fbt-theme') === 'dark' || (document.documentElement.getAttribute('data-fbt-theme') !== 'light' && !matchMedia('(prefers-color-scheme: light)').matches);
+        meta.setAttribute('content', dark ? '#07090e' : '#f3f5fa');
+      }
+    };
+  }, []);
+
   useEffect(() => {
     const t = setTimeout(() => setFinished(true), reduce.current ? 350 : 2500);
     return () => clearTimeout(t);

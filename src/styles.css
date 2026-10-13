@@ -1234,3 +1234,12 @@ button.battery { padding: 4px 2px; border-radius: 10px; }
 .battery-hero { display: flex; align-items: center; gap: 14px; color: var(--fg); }
 .battery-left { display: flex; flex-direction: column; gap: 2px; padding: 14px; border-radius: 16px; background: color-mix(in srgb, var(--accent) 10%, var(--card)); }
 .battery-left b { font-size: 24px; }
+
+/* no decorative glow behind the status bar / top bar: flat, solid top on every device */
+body::before { display: none; }
+.topbar::before { content: ''; position: absolute; left: 0; right: 0; bottom: 100%; height: 200px; background: var(--bg); }
+.logomark--tile { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18); }
+
+/* splash covers the whole screen, including the area behind the home indicator / toolbars */
+.splash { inset: auto; top: 0; left: 0; right: 0; height: 100vh; height: 100lvh; min-height: 100%; padding-bottom: env(safe-area-inset-bottom, 0px); }
+html.is-splash, html.is-splash body { background: #fff !important; }

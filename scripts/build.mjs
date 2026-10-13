@@ -42,7 +42,7 @@ const HEAD_META =
   '<link rel="apple-touch-icon" href="/apple-touch-icon.png?v=3">' +
   '<link rel="manifest" href="/manifest.webmanifest?v=3">' +
   '<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">' +
-  '<meta name="apple-mobile-web-app-title" content="FITBITRACK"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">' +
+  '<meta name="apple-mobile-web-app-title" content="FITBITRACK"><meta name="apple-mobile-web-app-status-bar-style" content="default">' +
   '<meta property="og:title" content="FITBITRACK"><meta property="og:description" content="Your Fitbit data. Reimagined."><meta property="og:image" content="/icon-512.png?v=3">';
 
 if (serve) {
@@ -58,7 +58,7 @@ if (serve) {
   await esbuild.build(options);
   const js = readFileSync('dist/assets/main.js', 'utf8').replace(/<\/script/gi, '<\\/script');
   const css = readFileSync('dist/assets/main.css', 'utf8');
-  const body = `<title>FITBITRACK</title>${FONTS}<meta name="theme-color" content="#07090e"><style>${css}</style><div id="root"></div><script>${js}</script>`;
+  const body = `<title>FITBITRACK</title>${FONTS}<meta name="theme-color" content="#ffffff"><style>${css}</style><div id="root"></div><script>${js}</script>`;
   // Fragment (no <html>/<body>) for hosts that add their own document skeleton…
   writeFileSync('dist/fitbitrack.html', body);
   // …and a complete document for normal static hosting.
