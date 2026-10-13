@@ -154,8 +154,8 @@ export function computeAllScores(ds: HealthDataset): DayScores[] {
     const acwr = i >= 14 && chronic > 0 ? acute / chronic : null;
 
     const contributors: Contributor[] = [];
-    if (hrvC) contributors.push({ key: 'hrv', label: 'HRV', impactPct: hrvC.pct, sub: clamp(66 + hrvC.z * 17, 5, 99), weight: 0.35 });
-    if (rhrC) contributors.push({ key: 'restingHr', label: 'Resting HR', impactPct: -rhrC.pct, sub: clamp(66 - rhrC.z * 14, 5, 99), weight: 0.2 });
+    if (hrvC) contributors.push({ key: 'hrv', label: 'HRV', impactPct: hrvC.pct, sub: clamp(66 + hrvC.z * 17, 5, 99), weight: 0.4 });
+    if (rhrC) contributors.push({ key: 'restingHr', label: 'Resting HR', impactPct: -rhrC.pct, sub: clamp(66 - rhrC.z * 14, 5, 99), weight: 0.25 });
     if (sleep) {
       const avgAsleep = mean(nonNull(asleepSeries.slice(Math.max(0, i - 30), i)));
       contributors.push({
@@ -163,18 +163,19 @@ export function computeAllScores(ds: HealthDataset): DayScores[] {
         label: 'Sleep',
         impactPct: Number.isFinite(avgAsleep) ? ((sleep.session.minutesAsleep - avgAsleep) / avgAsleep) * 100 : 0,
         sub: sleep.score,
-        weight: 0.3,
+        weight: 0.35,
       });
     }
     if (acwr != null) {
       const sub = clamp(96 - Math.max(0, acwr - 1.05) * 110 - Math.max(0, 0.6 - acwr) * 40, 10, 99);
-      contributors.push({ key: 'load', label: 'Recent Load', impactPct: -(acwr - 1) * 100 * 0.5, sub, weight: 0.15 });
+      // shown as context but not scored: Fitbit's Daily Readiness is built from HRV, resting HR and sleep only
+      contributors.push({ key: 'load', label: 'Recent Load', impactPct: -(acwr - 1) * 100 * 0.5, sub, weight: 0 });
     }
 
     let readiness: ReadinessResult | null = null;
     // Need at least one physiological signal to call it "readiness".
     if (hrvC || rhrC) {
-      const w = contributors.reduce((a, c) => a + c.weight, 0);
+      const w = contributors.reduce((a, c) => a + c.weight, 0) || 1;
       const score = Math.round(contributors.reduce((a, c) => a + c.sub * c.weight, 0) / w);
       readiness = { score, tier: tierOf(score), contributors, hrv: hrvC, restingHr: rhrC, acwr };
     }
