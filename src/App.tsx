@@ -12,11 +12,13 @@ import { BandIcon, Splash, Wordmark } from './ui/components/Logo';
 import { estimateBattery } from './insights/battery';
 import { WorkoutProvider } from './workouts/store';
 import { ActiveWorkoutLayer } from './ui/workouts/ActiveWorkout';
-import { IconAuto, IconMoon, IconSun, IconDumbbell, IconHeart, IconProfile, IconRefresh, IconSpark, IconToday, IconTrends } from './ui/components/Icons';
+import { IconAuto, IconMoon, IconSun, IconDumbbell, IconHeart, IconProfile, IconRefresh, IconSpark, IconToday, IconTrends, IconFood } from './ui/components/Icons';
+import { NutritionScreen } from './ui/screens/Nutrition';
 
 const NAV: { tab: Tab; label: string; icon: React.ReactNode }[] = [
   { tab: 'today', label: 'Today', icon: <IconToday size={22} /> },
   { tab: 'health', label: 'Health', icon: <IconHeart size={22} /> },
+  { tab: 'nutrition', label: 'Food', icon: <IconFood size={22} /> },
   { tab: 'train', label: 'Train', icon: <IconDumbbell size={22} /> },
   { tab: 'trends', label: 'Trends', icon: <IconTrends size={22} /> },
   { tab: 'profile', label: 'Profile', icon: <IconProfile size={22} /> },
@@ -151,6 +153,7 @@ function Shell() {
               {tab === 'health' && <HealthScreen />}
               {tab === 'train' && <TrainScreen />}
               {tab === 'trends' && <TrendsScreen />}
+              {tab === 'nutrition' && <NutritionScreen />}
               {tab === 'profile' && <ProfileScreen />}
             </>
           )}

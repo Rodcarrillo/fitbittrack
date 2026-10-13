@@ -28,4 +28,6 @@ export const GOOGLE_HEALTH_SCOPES = [
   'https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly',
   'https://www.googleapis.com/auth/googlehealth.profile.readonly',
   'https://www.googleapis.com/auth/googlehealth.settings.readonly', // paired devices + battery
+  'https://www.googleapis.com/auth/googlehealth.nutrition.readonly',
+  'https://www.googleapis.com/auth/googlehealth.nutrition.writeonly',
 ];

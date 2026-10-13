@@ -121,3 +121,12 @@ export const IconRefresh = ({ size, className }: P) => (
 export const IconAuto = ({ size, className }: P) => (
   <svg {...base(size)} className={className}><circle cx="12" cy="12" r="8.5" /><path d="M12 3.5v17a8.5 8.5 0 0 0 0-17Z" fill="currentColor" stroke="none" /></svg>
 );
+export const IconFood = ({ size, className }: P) => (
+  <svg {...base(size)} className={className}><path d="M7 3v8M5 3v4a2 2 0 0 0 4 0V3M7 11v10" /><path d="M17 21V3c-2.2 1.2-3.5 3.6-3.5 7v3H17" /></svg>
+);
+export const IconCamera = ({ size, className }: P) => (
+  <svg {...base(size)} className={className}><path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2l1.5-2h6l1.5 2h2A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5Z" /><circle cx="12" cy="13" r="3.5" /></svg>
+);
+export const IconWater = ({ size, className }: P) => (
+  <svg {...base(size)} className={className}><path d="M12 3.5s-6 6.6-6 10.7A6 6 0 0 0 18 14.2C18 10.1 12 3.5 12 3.5Z" /></svg>
+);

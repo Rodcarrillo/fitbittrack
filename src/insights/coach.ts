@@ -217,6 +217,16 @@ export function buildCoachContext(a: Analysis, workouts: Workout[] = [], exercis
     }
   }
 
+  const food = ds.food ?? [];
+  if (food.length) {
+    lines.push('\nFood log, last 7 days (date: kcal, protein/carbs/fat g, items):');
+    const days = [...new Set(food.map((f) => f.date))].sort().slice(-7);
+    for (const d of days) {
+      const xs = food.filter((f) => f.date === d);
+      const g = (k: 'proteinG' | 'carbsG' | 'fatG') => Math.round(xs.reduce((a, f) => a + (f[k] ?? 0), 0));
+      lines.push(`${d}: ${xs.reduce((a, f) => a + f.kcal, 0)} kcal, ${g('proteinG')}/${g('carbsG')}/${g('fatG')} — ${xs.map((f) => f.name).join('; ').slice(0, 220)}`);
+    }
+  }
   const j = ds.journal.slice(-10);
   if (j.length) {
     lines.push('\nJournal (recent):');

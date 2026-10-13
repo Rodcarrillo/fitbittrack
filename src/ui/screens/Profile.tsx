@@ -269,6 +269,8 @@ const DIAG_LABEL: Record<string, string> = {
   devices: 'Band & battery',
   profile: 'Profile',
   height: 'Height',
+  food: 'Food log',
+  water: 'Water log',
 };
 
 /** What came back from Google Health for each data type, so gaps are visible instead of silent. */

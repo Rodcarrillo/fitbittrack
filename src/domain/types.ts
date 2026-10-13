@@ -130,6 +130,26 @@ export interface JournalEntry {
 }
 
 /** Everything a provider returns. History is ascending by date. */
+export type MealType = 'BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACK' | 'ANYTIME';
+export interface FoodEntry {
+  /** Google Health resource name (needed to delete); local- prefix when not saved remotely */
+  id: string;
+  date: ISODate;
+  time: ISODateTime;
+  name: string;
+  meal: MealType;
+  kcal: number;
+  proteinG: number | null;
+  carbsG: number | null;
+  fatG: number | null;
+}
+export interface WaterEntry {
+  id: string;
+  date: ISODate;
+  time: ISODateTime;
+  ml: number;
+}
+
 export interface HealthDataset {
   source: { id: string; label: string; isSample: boolean; fetchedAt: ISODateTime; diagnostics?: Record<string, string> };
   profile: UserProfile;
@@ -140,4 +160,6 @@ export interface HealthDataset {
   exercises: Exercise[];
   journal: JournalEntry[];
   availability: Availability;
+  food?: FoodEntry[];
+  water?: WaterEntry[];
 }

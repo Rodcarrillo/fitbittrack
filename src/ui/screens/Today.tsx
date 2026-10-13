@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../../auth/session';
+import { NutritionTodayCard } from './Nutrition';
 import { useApp } from '../../state/store';
 import { SERVER_MODE } from '../../data/cloudSync';
 import { ScoreRing } from '../components/ScoreRing';
@@ -196,6 +197,10 @@ export function TodayScreen() {
             Aims for {fmtDuration(plan.needMin)} of sleep, based on your goal{today.load.score >= 70 ? ", today's training" : ''} and recent nights.
           </p>
         </section>
+
+        <div className="dash__food">
+          <NutritionTodayCard />
+        </div>
 
         <section className="card journal-cta dash__journal">
           <div className="tonight__head">

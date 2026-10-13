@@ -29,9 +29,12 @@ const GOOGLE_SCOPES = [
   'https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly',
   'https://www.googleapis.com/auth/googlehealth.profile.readonly',
   'https://www.googleapis.com/auth/googlehealth.settings.readonly', // paired devices + battery
+  'https://www.googleapis.com/auth/googlehealth.nutrition.readonly', // food & water log
+  'https://www.googleapis.com/auth/googlehealth.nutrition.writeonly', // add food & water from FITBITRACK
 ];
+const WRITABLE_TYPES = new Set(['nutrition-log', 'hydration-log']);
 const ALLOWED_TYPES = new Set([
-  'sleep', 'exercise', 'steps', 'total-calories', 'weight', 'height', 'body-fat', 'oxygen-saturation', 'respiratory-rate-sleep-summary', 'vo2-max', 'run-vo2-max', 'heart-rate-variability',
+  'sleep', 'exercise', 'steps', 'total-calories', 'weight', 'height', 'body-fat', 'oxygen-saturation', 'respiratory-rate-sleep-summary', 'vo2-max', 'run-vo2-max', 'heart-rate-variability', 'nutrition-log', 'hydration-log', 'food',
   'daily-resting-heart-rate', 'daily-heart-rate-variability', 'daily-respiratory-rate',
   'daily-oxygen-saturation', 'daily-sleep-temperature-derivations', 'daily-vo2-max', 'daily-heart-rate-zones',
 ]);
@@ -204,6 +207,7 @@ async function route(req, context) {
           signed_in: true,
           google_connected: true,
           band_permission_granted: (u.googleScopes ?? '').includes('googlehealth.settings.readonly'),
+          nutrition_permission_granted: (u.googleScopes ?? '').includes('googlehealth.nutrition.writeonly'),
           devices_status: r?.status ?? 'error',
           devices: (body.pairedDevices ?? []).map((d) => ({ device: d.deviceVersion, type: d.deviceType, battery: d.batteryLevel ?? d.batteryStatus ?? null, lastSync: d.lastSyncTime ?? null })),
           devices_error: body.error?.message ?? undefined,
@@ -297,7 +301,7 @@ async function route(req, context) {
     const u = await currentUser(req);
     const scopes = u?.googleScopes ?? '';
     // connected before the band/battery permission existed → ask once to reconnect
-    return json({ connected: !!u?.googleRefresh, needsReconnect: !!u?.googleRefresh && !scopes.includes('googlehealth.settings.readonly') });
+    return json({ connected: !!u?.googleRefresh, needsReconnect: !!u?.googleRefresh && !(scopes.includes('googlehealth.settings.readonly') && scopes.includes('googlehealth.nutrition.writeonly')) });
   }
 
   /* everything below needs a signed-in user */
@@ -332,7 +336,23 @@ async function route(req, context) {
       const b = await readJson(req);
       return googleCall(u, 'POST', `/users/me/dataTypes/${type}/dataPoints:dailyRollUp`, { range: b.range, windowSizeDays: b.windowSizeDays ?? 1 });
     }
+    // writes: only food & water logs, only create
+    if (op === 'dataPoints' && method === 'POST' && WRITABLE_TYPES.has(type)) {
+      const b = await readJson(req);
+      const field = type === 'nutrition-log' ? 'nutritionLog' : 'hydrationLog';
+      if (!b?.[field]) return json({ error: 'bad_body' }, 400);
+      return googleCall(u, 'POST', `/users/me/dataTypes/${type}/dataPoints`, { [field]: b[field] });
+    }
   }
+  const del = path.match(/^\/api\/health\/(nutrition-log|hydration-log)\/delete$/);
+  if (del && method === 'POST') {
+    const names = ((await readJson(req)).names ?? []).filter((n) => typeof n === 'string' && n.startsWith(`users/me/dataTypes/${del[1]}/dataPoints/`)).slice(0, 50);
+    if (!names.length) return json({ error: 'bad_body' }, 400);
+    return googleCall(u, 'POST', `/users/me/dataTypes/${del[1]}/dataPoints:batchDelete`, { names });
+  }
+
+  /* ---------- food recognition (Gemini vision / text) ---------- */
+  if (path === '/api/food/analyze' && method === 'POST') return analyzeFood(u, await readJson(req));
 
   /* ---------- Hevy ---------- */
   if (path === '/api/hevy/connect' && method === 'POST') {
@@ -470,4 +490,65 @@ async function coachReply(u, body) {
     return json({ text, model });
   }
   return json(lastErr ?? { error: 'coach_failed' }, lastErr?.status ?? 502);
+}
+
+
+/* ---------------------------------------------------------------- food recognition */
+const FOOD_PROMPT = `You are a nutrition assistant. Identify every food and drink in the user's meal (from the photo and/or their description) and estimate a realistic portion and its nutrition.
+Return ONLY JSON: {"items":[{"name":string,"portion":string,"kcal":number,"protein_g":number,"carbs_g":number,"fat_g":number}],"note":string}
+- name: short, in the user's language if they wrote one (default Spanish), e.g. "Tacos al pastor".
+- portion: human portion, e.g. "3 tacos", "1 taza", "350 ml".
+- Use typical Mexican/Latin American portions when relevant. Round kcal to whole numbers and grams to 1 decimal.
+- If you can't see food, return {"items":[],"note":"..."}.`;
+
+async function analyzeFood(u, body) {
+  const key = env('GEMINI_API_KEY');
+  if (!key) return json({ error: 'coach_not_configured', detail: 'Add GEMINI_API_KEY in Netlify to use photo food logging.' }, 503);
+  const text = String(body?.text ?? '').slice(0, 800);
+  const image = typeof body?.image === 'string' ? body.image : '';
+  const m = image.match(/^data:(image\/(?:jpeg|png|webp|heic));base64,([A-Za-z0-9+/=]+)$/);
+  if (!m && !text.trim()) return json({ error: 'empty' }, 400);
+  if (m && m[2].length > 4_500_000) return json({ error: 'image_too_large' }, 413);
+  const parts = [];
+  if (m) parts.push({ inlineData: { mimeType: m[1], data: m[2] } });
+  parts.push({ text: text.trim() ? `User description: ${text}` : 'Analyze this meal.' });
+  let lastErr = null;
+  for (const model of COACH_MODELS()) {
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: FOOD_PROMPT }] },
+        contents: [{ role: 'user', parts }],
+        generationConfig: { temperature: 0.2, maxOutputTokens: 4096, responseMimeType: 'application/json' },
+      }),
+    }).catch(() => null);
+    if (!r) {
+      lastErr = { error: 'coach_unreachable' };
+      continue;
+    }
+    if (r.status === 404) {
+      lastErr = { error: 'coach_model_not_found' };
+      continue;
+    }
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) return json({ error: r.status === 429 ? 'coach_quota' : 'food_failed', detail: data?.error?.message ?? `Gemini error ${r.status}` }, r.status === 429 ? 429 : 502);
+    const raw = (data?.candidates?.[0]?.content?.parts ?? []).map((p) => (p.thought ? '' : p.text ?? '')).join('');
+    try {
+      const parsed = JSON.parse(raw.replace(/^```(?:json)?|```$/g, '').trim());
+      const num = (v) => (Number.isFinite(Number(v)) ? Math.max(0, Number(v)) : 0);
+      const items = (Array.isArray(parsed.items) ? parsed.items : []).slice(0, 15).map((it) => ({
+        name: String(it.name ?? 'Food').slice(0, 80),
+        portion: String(it.portion ?? '').slice(0, 60),
+        kcal: Math.round(num(it.kcal)),
+        protein_g: Math.round(num(it.protein_g) * 10) / 10,
+        carbs_g: Math.round(num(it.carbs_g) * 10) / 10,
+        fat_g: Math.round(num(it.fat_g) * 10) / 10,
+      }));
+      return json({ items, note: String(parsed.note ?? '').slice(0, 300) });
+    } catch {
+      return json({ error: 'food_unreadable', detail: "Couldn't read the analysis. Try again or describe the meal." }, 502);
+    }
+  }
+  return json(lastErr ?? { error: 'food_failed' }, 502);
 }

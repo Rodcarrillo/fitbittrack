@@ -4,6 +4,9 @@ import { createProvider } from '../data/providers';
 import { scoped, type Account } from '../auth/account';
 import { useCloudSync } from '../data/cloudSync';
 import { recordBattery } from '../insights/battery';
+import { deleteEntries, saveFood, saveWater, type NewFood } from '../data/nutrition';
+import { SERVER_MODE } from '../data/cloudSync';
+import { fmtISO as isoDay } from '../calc/stats';
 import { computeAllScores } from '../calc/scores';
 import { analyze, type Analysis } from '../insights/engine';
 
@@ -74,13 +77,20 @@ function applyPermissions(ds: HealthDataset, perms: Record<PermissionKey, boolea
 /** 'auto' follows the device (prefers-color-scheme). */
 export type ThemePref = 'auto' | 'light' | 'dark';
 
-export type Tab = 'today' | 'health' | 'train' | 'trends' | 'profile';
+export type Tab = 'today' | 'health' | 'nutrition' | 'train' | 'trends' | 'profile';
 export type HealthView = 'recovery' | 'sleep' | 'age';
-export type Sheet = null | 'insights' | 'coach' | 'journal' | 'connect' | 'privacy' | 'battery';
+export type Sheet = null | 'insights' | 'coach' | 'journal' | 'connect' | 'privacy' | 'battery' | 'food';
+
+export type NutritionActions = {
+  addFood: (f: NewFood) => Promise<void>;
+  addWater: (ml: number) => Promise<void>;
+  removeFood: (id: string) => Promise<void>;
+  removeWater: (id: string) => Promise<void>;
+};
 
 export type BodyOverrides = { age?: number; heightCm?: number; weightKg?: number };
 
-interface Ctx {
+interface Ctx extends NutritionActions {
   body: BodyOverrides;
   setBody: (b: BodyOverrides) => void;
   loading: boolean;
@@ -144,7 +154,7 @@ export function AppProvider({ children, account, onLogout }: { children: React.R
   const [error, setError] = useState<string | null>(null);
   const [tab, setTabState] = useState<Tab>(() => {
     const h = typeof location !== 'undefined' ? location.hash.replace('#', '') : '';
-    return (['today', 'health', 'train', 'trends', 'profile'].includes(h) ? h : store.get<Tab>('tab', 'today')) as Tab;
+    return (['today', 'health', 'nutrition', 'train', 'trends', 'profile'].includes(h) ? h : store.get<Tab>('tab', 'today')) as Tab;
   });
   const [healthView, setHealthView] = useState<HealthView>('recovery');
   const [sheet, setSheet] = useState<Sheet>(null);
@@ -206,6 +216,29 @@ export function AppProvider({ children, account, onLogout }: { children: React.R
     });
   };
 
+  /* ---- food & water: saved to Google Health, reflected locally right away ---- */
+  const addFood = async (f: NewFood) => {
+    const entry = SERVER_MODE
+      ? await saveFood(f)
+      : { id: `local-${Date.now()}`, date: isoDay(f.at), time: f.at.toISOString(), name: f.name, meal: f.meal, kcal: Math.round(f.kcal), proteinG: f.proteinG ?? null, carbsG: f.carbsG ?? null, fatG: f.fatG ?? null };
+    setRaw((r) => (r ? { ...r, food: [...(r.food ?? []), entry].sort((a, b) => a.time.localeCompare(b.time)) } : r));
+    haptic(15);
+  };
+  const addWater = async (ml: number) => {
+    const at = new Date();
+    const entry = SERVER_MODE ? await saveWater(ml, at) : { id: `local-${Date.now()}`, date: isoDay(at), time: at.toISOString(), ml };
+    setRaw((r) => (r ? { ...r, water: [...(r.water ?? []), entry] } : r));
+    haptic(10);
+  };
+  const removeFood = async (id: string) => {
+    if (SERVER_MODE) await deleteEntries('nutrition-log', [id]);
+    setRaw((r) => (r ? { ...r, food: (r.food ?? []).filter((x) => x.id !== id) } : r));
+  };
+  const removeWater = async (id: string) => {
+    if (SERVER_MODE) await deleteEntries('hydration-log', [id]);
+    setRaw((r) => (r ? { ...r, water: (r.water ?? []).filter((x) => x.id !== id) } : r));
+  };
+
   const merged = useMemo(() => {
     if (!raw) return null;
     const journal = [...raw.journal.filter((j) => !journalEdits[j.date])];
@@ -243,7 +276,7 @@ export function AppProvider({ children, account, onLogout }: { children: React.R
 
   return (
     <AppCtx.Provider
-      value={{ body, setBody, loading, error, analysis, raw, tab, setTab, healthView, setHealthView, sheet, openSheet, sheetPayload, permissions, setPermission, toggleJournalTag, setJournalNote, todayJournal, refresh, refreshing, theme, setTheme, account: account ?? null, logout: () => onLogout?.() }}
+      value={{ addFood, addWater, removeFood, removeWater, body, setBody, loading, error, analysis, raw, tab, setTab, healthView, setHealthView, sheet, openSheet, sheetPayload, permissions, setPermission, toggleJournalTag, setJournalNote, todayJournal, refresh, refreshing, theme, setTheme, account: account ?? null, logout: () => onLogout?.() }}
     >
       {children}
     </AppCtx.Provider>

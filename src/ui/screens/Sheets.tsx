@@ -8,6 +8,9 @@ import { useWorkouts } from '../../workouts/store';
 import { EXERCISE_LIBRARY } from '../../workouts/library';
 import { SERVER_MODE } from '../../data/cloudSync';
 import { estimateBattery, fmtHoursLeft, typicalHours } from '../../insights/battery';
+import { analyzeFood, compressImage, mealForHour, MEAL_LABEL, type FoodGuess } from '../../data/nutrition';
+import type { MealType } from '../../domain/types';
+import { IconCamera } from '../components/Icons';
 import { BandIcon } from '../components/Logo';
 import { MIN_SAMPLES, TAG_LABEL } from '../../insights/engine';
 import { GOOGLE_HEALTH_SCOPES } from '../../auth/session';
@@ -24,7 +27,7 @@ export function Sheets() {
     return () => window.removeEventListener('keydown', onKey);
   }, [sheet, openSheet]);
   if (!sheet) return null;
-  const title = { insights: 'Insights', coach: 'FITBITRACK Coach', journal: 'Journal', connect: 'Connect your Fitbit', privacy: 'Privacy', battery: 'Band battery' }[sheet];
+  const title = { insights: 'Insights', coach: 'FITBITRACK Coach', journal: 'Journal', connect: 'Connect your Fitbit', privacy: 'Privacy', battery: 'Band battery', food: 'Add food' }[sheet];
   return (
     <div className="sheet-wrap" onClick={() => openSheet(null)}>
       <div className="sheet" role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()} ref={ref} tabIndex={-1}>
@@ -42,6 +45,7 @@ export function Sheets() {
           {sheet === 'connect' && <ConnectSheet />}
           {sheet === 'privacy' && <PrivacySheet />}
           {sheet === 'battery' && <BatterySheet />}
+          {sheet === 'food' && <FoodSheet />}
         </div>
       </div>
     </div>
@@ -365,6 +369,155 @@ function BatterySheet() {
         Reported by Google Health at your band's last sync{ago ? ` (${ago < 60 ? `${ago} min` : ago < 1440 ? `${Math.round(ago / 60)} h` : `${Math.round(ago / 1440)} days`} ago)` : ''}
         {d.battery != null && est && est.level !== d.battery ? `: ${d.battery}% then, ~${est.level}% now` : ''}.
       </p>
+    </div>
+  );
+}
+
+type Draft = FoodGuess & { key: number };
+
+/** Add food: photo (Gemini estimates), a description, or manual entry. Review, then save to Google Health. */
+function FoodSheet() {
+  const { sheetPayload, addFood, openSheet } = useApp();
+  const initialImage = sheetPayload?.startsWith('data:image') ? sheetPayload : null;
+  const forDate = sheetPayload?.startsWith('date:') ? sheetPayload.slice(5) : null;
+  const [image, setImage] = useState<string | null>(initialImage);
+  const [text, setText] = useState('');
+  const [items, setItems] = useState<Draft[]>([]);
+  const [note, setNote] = useState('');
+  const [meal, setMeal] = useState<MealType>(mealForHour(new Date().getHours()));
+  const [state, setState] = useState<'idle' | 'analyzing' | 'saving' | 'done'>('idle');
+  const [err, setErr] = useState<string | null>(null);
+  const keyRef = useRef(1);
+
+  const analyze = async (img: string | null, t: string) => {
+    setState('analyzing');
+    setErr(null);
+    try {
+      const r = await analyzeFood({ image: img ?? undefined, text: t || undefined });
+      setItems(r.items.map((x) => ({ ...x, key: keyRef.current++ })));
+      setNote(r.note);
+      if (!r.items.length) setErr(r.note || "Couldn't find food in that. Try another photo or describe it.");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Analysis failed.');
+    } finally {
+      setState('idle');
+    }
+  };
+
+  useEffect(() => {
+    if (initialImage) analyze(initialImage, '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const set = (k: number, patch: Partial<FoodGuess>) => setItems((xs) => xs.map((x) => (x.key === k ? { ...x, ...patch } : x)));
+  const total = items.reduce((a, x) => a + (Number(x.kcal) || 0), 0);
+
+  const save = async () => {
+    setState('saving');
+    setErr(null);
+    const at = forDate ? new Date(`${forDate}T${meal === 'BREAKFAST' ? '08' : meal === 'LUNCH' ? '14' : meal === 'SNACK' ? '17' : '20'}:00`) : new Date();
+    try {
+      for (const x of items) {
+        if (!x.name.trim()) continue;
+        await addFood({ name: x.portion ? `${x.name} (${x.portion})` : x.name, kcal: Number(x.kcal) || 0, proteinG: Number(x.protein_g) || 0, carbsG: Number(x.carbs_g) || 0, fatG: Number(x.fat_g) || 0, meal, at });
+      }
+      setState('done');
+      setTimeout(() => openSheet(null), 700);
+    } catch (e) {
+      setErr(e instanceof Error ? `Couldn't save to Google Health: ${e.message}` : "Couldn't save.");
+      setState('idle');
+    }
+  };
+
+  return (
+    <div className="foodsheet">
+      {image && <img className="foodsheet__img" src={image} alt="Your meal" />}
+      {!items.length && state !== 'analyzing' && (
+        <>
+          <div className="nutri-actions">
+            <label className="btn btn--primary photo-btn">
+              <IconCamera size={18} /> {image ? 'New photo' : 'Take photo'}
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                hidden
+                onChange={async (e) => {
+                  const f = e.target.files?.[0];
+                  e.target.value = '';
+                  if (!f) return;
+                  const img = await compressImage(f);
+                  setImage(img);
+                  analyze(img, text);
+                }}
+              />
+            </label>
+            <button className="btn btn--ghost" onClick={() => setItems([{ key: keyRef.current++, name: '', portion: '', kcal: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }])} type="button">
+              Enter manually
+            </button>
+          </div>
+          <form
+            className="ask"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (text.trim() || image) analyze(image, text);
+            }}
+          >
+            <input className="input" value={text} onChange={(e) => setText(e.target.value)} placeholder="Or describe it: 3 tacos al pastor y una coca" aria-label="Describe your meal" />
+            <button className="ask__go" type="submit" disabled={!text.trim() && !image} aria-label="Analyze">
+              <IconArrowRight size={18} />
+            </button>
+          </form>
+        </>
+      )}
+      {state === 'analyzing' && <p className="qa__thinking">Analyzing your meal…</p>}
+
+      {items.length > 0 && (
+        <>
+          <div className="mealpick" role="radiogroup" aria-label="Meal">
+            {(['BREAKFAST', 'LUNCH', 'SNACK', 'DINNER'] as MealType[]).map((m) => (
+              <button key={m} className={`chip ${meal === m ? 'is-on' : ''}`} onClick={() => setMeal(m)} role="radio" aria-checked={meal === m} type="button">
+                {MEAL_LABEL[m]}
+              </button>
+            ))}
+          </div>
+          {items.map((x) => (
+            <div key={x.key} className="fooditem card">
+              <div className="fooditem__head">
+                <input className="input" value={x.name} onChange={(e) => set(x.key, { name: e.target.value })} placeholder="Food" aria-label="Food name" />
+                <button className="setdel" onClick={() => setItems((xs) => xs.filter((y) => y.key !== x.key))} aria-label="Remove" type="button">
+                  ×
+                </button>
+              </div>
+              <input className="input fooditem__portion" value={x.portion} onChange={(e) => set(x.key, { portion: e.target.value })} placeholder="Portion (e.g. 1 plate)" aria-label="Portion" />
+              <div className="fooditem__nums">
+                {(
+                  [
+                    ['kcal', 'kcal'],
+                    ['protein_g', 'Protein g'],
+                    ['carbs_g', 'Carbs g'],
+                    ['fat_g', 'Fat g'],
+                  ] as const
+                ).map(([k, label]) => (
+                  <label key={k}>
+                    <span className="fine">{label}</span>
+                    <input className="input num" inputMode="decimal" value={String(x[k])} onChange={(e) => set(x.key, { [k]: e.target.value.replace(',', '.') as unknown as number })} />
+                  </label>
+                ))}
+              </div>
+            </div>
+          ))}
+          <button className="link fine" onClick={() => setItems((xs) => [...xs, { key: keyRef.current++, name: '', portion: '', kcal: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }])} type="button">
+            + Add another item
+          </button>
+          {note && <p className="fine">{note}</p>}
+          <p className="fine">Estimates from the photo can be off. Adjust portions and numbers before saving.</p>
+          <button className="btn btn--primary btn--block btn--xl" disabled={state === 'saving' || state === 'done' || !items.some((x) => x.name.trim())} onClick={save} type="button">
+            {state === 'saving' ? 'Saving to Google Health…' : state === 'done' ? '✓ Saved' : `Save ${Math.round(total)} kcal`}
+          </button>
+        </>
+      )}
+      {err && <div className="notice">{err}</div>}
     </div>
   );
 }
