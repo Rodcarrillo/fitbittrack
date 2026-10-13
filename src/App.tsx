@@ -10,7 +10,10 @@ import { ProfileScreen } from './ui/screens/Profile';
 import { Sheets } from './ui/screens/Sheets';
 import { BandIcon, Splash, Wordmark } from './ui/components/Logo';
 import { estimateBattery } from './insights/battery';
-import { WorkoutProvider } from './workouts/store';
+import { buildWidgetSnapshot } from './insights/widget';
+import { SERVER_MODE } from './data/cloudSync';
+import { api } from './auth/session';
+import { WorkoutProvider, useWorkouts } from './workouts/store';
 import { ActiveWorkoutLayer } from './ui/workouts/ActiveWorkout';
 import { IconAuto, IconMoon, IconSun, IconDumbbell, IconHeart, IconProfile, IconRefresh, IconSpark, IconToday, IconTrends, IconFood } from './ui/components/Icons';
 import { NutritionScreen } from './ui/screens/Nutrition';
@@ -75,6 +78,20 @@ function Shell() {
   const pull = usePullToRefresh(refresh);
   const device = raw?.devices[0];
   const batteryNow = device ? estimateBattery(device)?.level ?? null : null;
+  const wk = useWorkouts();
+  // keep the home-screen widget feed up to date (server mode, real data only)
+  useEffect(() => {
+    if (!SERVER_MODE || !analysis || !raw || raw.source.isSample) return;
+    const t = setTimeout(() => {
+      try {
+        const snap = buildWidgetSnapshot(analysis, raw, wk.data?.history ?? [], wk.data?.sessions ?? []);
+        api('/api/data/widget', { method: 'PUT', body: JSON.stringify({ value: snap }) }).catch(() => {});
+      } catch {
+        /* widget feed is best-effort */
+      }
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [analysis, raw, wk.data]);
 
   useEffect(() => {
     window.scrollTo({ top: 0 });

@@ -39,7 +39,7 @@ const ALLOWED_TYPES = new Set([
   'daily-oxygen-saturation', 'daily-sleep-temperature-derivations', 'daily-vo2-max', 'daily-heart-rate-zones',
 ]);
 const HEVY_PATHS = new Set(['/v1/workouts', '/v1/workouts/events', '/v1/exercise_templates', '/v1/user/info']);
-const DATA_KEYS = new Set(['workouts', 'journal', 'settings']);
+const DATA_KEYS = new Set(['workouts', 'journal', 'settings', 'widget']);
 const MAX_BLOB = 3 * 1024 * 1024;
 const SESSION_DAYS = 30;
 
@@ -304,9 +304,49 @@ async function route(req, context) {
     return json({ connected: !!u?.googleRefresh, needsReconnect: !!u?.googleRefresh && !(scopes.includes('googlehealth.settings.readonly') && scopes.includes('googlehealth.nutrition.writeonly')) });
   }
 
+  /* ---------- widget feed (Scriptable): personal key instead of the login cookie ---------- */
+  if (path === '/api/widget' && method === 'GET') {
+    const token = (req.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '') || url.searchParams.get('key') || '';
+    if (!/^fbtw_[A-Za-z0-9_-]{30,}$/.test(token)) return json({ error: 'bad_key' }, 401);
+    const link = await store().get(`wtok:${crypto.createHash('sha256').update(token).digest('hex')}`, { type: 'json' });
+    const wu = link ? await getUser(link.uid) : null;
+    if (!wu || wu.widgetTokenHash !== crypto.createHash('sha256').update(token).digest('hex')) return json({ error: 'bad_key' }, 401);
+    const snap = await store().get(`data:${wu.id}:widget`, { type: 'json' });
+    const out = { ...(snap?.value ?? {}), savedAt: snap?.updatedAt ?? null };
+    // battery is read live so the widget stays fresh even if the app wasn't opened
+    if (wu.googleRefresh) {
+      try {
+        const r = await googleCall(wu, 'GET', '/users/me/pairedDevices');
+        const d = r.ok ? ((await r.json()).pairedDevices ?? []).find((x) => x.deviceType !== 'SCALE') : null;
+        if (d && d.batteryLevel != null) out.batteryLive = { level: Number(d.batteryLevel), lastSync: d.lastSyncTime ?? null, device: d.deviceVersion ?? null };
+      } catch {
+        /* keep the snapshot */
+      }
+    }
+    return json(out);
+  }
+
   /* everything below needs a signed-in user */
   const u = await currentUser(req);
   if (!u) return json({ error: 'not_signed_in' }, 401);
+
+  /* ---------- widget key ---------- */
+  if (path === '/api/widget/key' && method === 'POST') {
+    if (u.widgetTokenHash) await store().delete(`wtok:${u.widgetTokenHash}`).catch(() => {});
+    const token = `fbtw_${crypto.randomBytes(24).toString('base64url')}`;
+    const h = crypto.createHash('sha256').update(token).digest('hex');
+    await store().setJSON(`wtok:${h}`, { uid: u.id });
+    u.widgetTokenHash = h;
+    await saveUser(u);
+    return json({ key: token });
+  }
+  if (path === '/api/widget/key' && method === 'DELETE') {
+    if (u.widgetTokenHash) await store().delete(`wtok:${u.widgetTokenHash}`).catch(() => {});
+    delete u.widgetTokenHash;
+    await saveUser(u);
+    return json(undefined, 204);
+  }
+  if (path === '/api/widget/key' && method === 'GET') return json({ active: !!u.widgetTokenHash });
 
   /* ---------- AI coach (Gemini) ---------- */
   if (path === '/api/coach' && method === 'POST') return coachReply(u, await readJson(req));

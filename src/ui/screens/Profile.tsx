@@ -4,6 +4,8 @@ import { IconBell, IconChevron, IconDownload, IconShield, IconTrash } from '../c
 import { BandIcon } from '../components/Logo';
 import { Segmented } from '../components/Cards';
 import { fmtDuration, fmtNum } from '../../calc/stats';
+import { SERVER_MODE } from '../../data/cloudSync';
+import { api } from '../../auth/session';
 
 function Toggle({ id, on, onChange, label }: { id: string; on: boolean; onChange: (v: boolean) => void; label: string }) {
   return (
@@ -69,6 +71,8 @@ export function ProfileScreen() {
         )}
 
         <BodyCard />
+
+        {SERVER_MODE && !ds.source.isSample && <WidgetsCard />}
 
         {ds.source.diagnostics && <DataCheck diag={ds.source.diagnostics} fetchedAt={ds.source.fetchedAt} />}
 
@@ -290,6 +294,77 @@ function DataCheck({ diag, fetchedAt }: { diag: Record<string, string>; fetchedA
         );
       })}
       <p className="fine">Loaded {new Date(fetchedAt).toLocaleString()}. "error 403" means Google didn't grant that permission: reconnect and tick every box.</p>
+    </section>
+  );
+}
+
+/** Scriptable home-screen widgets: personal key + the script, ready to paste. */
+function WidgetsCard() {
+  const [script, setScript] = useState<string | null>(null);
+  const [key, setKey] = useState<string | null>(null);
+  const [active, setActive] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  React.useEffect(() => {
+    fetch('/scriptable/FITBITRACK.js').then((r) => r.text()).then(setScript).catch(() => {});
+    api<{ active: boolean }>('/api/widget/key').then((r) => setActive(r.active)).catch(() => {});
+  }, []);
+  const filled = key && script ? script.replace('__APP_URL__', location.origin).replace('__WIDGET_KEY__', key) : null;
+  const copy = async (t: string, what: string) => {
+    try {
+      await navigator.clipboard.writeText(t);
+      setMsg(`${what} copied.`);
+    } catch {
+      setMsg('Copy blocked: select the text below and copy it.');
+    }
+  };
+  return (
+    <section className="card pcard widgets-card">
+      <div className="eyebrow">Home-screen widgets · Scriptable</div>
+      <p className="fine">Rings, today's dashboard, sleep, band battery and food on your iPhone home screen and Lock Screen. Uses the free Scriptable app.</p>
+      {!key ? (
+        <button
+          className="btn btn--primary btn--block"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            try {
+              const r = await api<{ key: string }>('/api/widget/key', { method: 'POST' });
+              setKey(r.key);
+              setActive(true);
+            } finally {
+              setBusy(false);
+            }
+          }}
+          type="button"
+        >
+          {busy ? 'Creating…' : active ? 'Create a new widget key' : 'Set up widgets'}
+        </button>
+      ) : (
+        <>
+          <ol className="hevy-steps">
+            <li>
+              Install <b>Scriptable</b> from the App Store (free).
+            </li>
+            <li>
+              Tap <b>Copy script</b>. In Scriptable tap <b>+</b>, paste, and name it <b>FITBITRACK</b>.
+            </li>
+            <li>
+              Long-press your home screen → <b>+</b> → Scriptable → choose a size → <b>Edit Widget</b> → Script: FITBITRACK. Parameter (optional): <code>rings</code>, <code>today</code>, <code>sleep</code>, <code>battery</code> or <code>food</code>.
+            </li>
+          </ol>
+          <button className="btn btn--primary btn--block" disabled={!filled} onClick={() => filled && copy(filled, 'Script')} type="button">
+            {filled ? 'Copy script' : 'Loading script…'}
+          </button>
+          <button className="btn btn--ghost btn--block" onClick={() => copy(key, 'Key')} type="button">
+            Copy only the key
+          </button>
+          {msg && <p className="fine">{msg}</p>}
+          {msg?.startsWith('Copy blocked') && filled && <textarea className="textarea" rows={4} readOnly value={filled} onFocus={(e) => e.currentTarget.select()} />}
+          <p className="fine">The key only lets a widget read your summary. Creating a new key turns off the old one.</p>
+        </>
+      )}
+      {active && !key && <p className="fine">Widgets are set up. Create a new key only if you need to copy the script again.</p>}
     </section>
   );
 }
