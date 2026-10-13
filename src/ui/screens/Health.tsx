@@ -66,8 +66,11 @@ function Recovery() {
           {r && (
             <div className="contribs">
               {r.contributors.map((c) => (
-                <div key={c.key} className="contrib">
-                  <span className="contrib__label">{c.label}</span>
+                <div key={c.key} className={`contrib ${c.weight === 0 ? 'contrib--info' : ''}`}>
+                  <span className="contrib__label">
+                    {c.label}
+                    {c.weight === 0 && <span className="fine"> · not in score</span>}
+                  </span>
                   <span className="contrib__track">
                     <span className="contrib__fill" style={{ width: `${c.sub}%`, background: c.sub >= 67 ? 'var(--ready)' : c.sub >= 34 ? 'var(--warn)' : 'var(--bad)' }} />
                   </span>
@@ -76,7 +79,7 @@ function Recovery() {
                   </span>
                 </div>
               ))}
-              <p className="fine">Contributor % = how much each factor helps (+) or holds back (−) versus your personal baseline.</p>
+              <p className="fine">Contributor % = how much each factor helps (+) or holds back (−) versus your personal baseline. The score uses HRV, resting HR and sleep, like Fitbit's Daily Readiness; recent training load is shown for context.</p>
             </div>
           )}
         </div>
