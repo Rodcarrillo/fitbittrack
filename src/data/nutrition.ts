@@ -188,7 +188,7 @@ export async function analyzeFood(input: { image?: string; text?: string }): Pro
     throw new Error("Couldn't reach FITBITRACK's server. Check your connection, or enter the food manually.");
   }
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.detail ?? (body.error === 'coach_not_configured' ? 'Add GEMINI_API_KEY in Netlify to use photo logging.' : `Analysis failed (${res.status}).`));
+  if (!res.ok) throw new Error(body.detail ?? (body.error === 'coach_not_configured' ? 'Add GEMINI_API_KEY in Vercel (Settings → Environment Variables) to use photo logging.' : `Analysis failed (${res.status}).`));
   return { items: body.items ?? [], note: body.note ?? '' };
 }
 

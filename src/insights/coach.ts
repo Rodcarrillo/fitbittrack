@@ -265,7 +265,7 @@ export async function askGemini(question: string, context: string, history: Coac
     code === 'coach_not_configured'
       ? 'The AI coach is not set up yet (missing GEMINI_API_KEY). Showing the built-in answer.'
       : code === 'coach_key_invalid'
-        ? 'Gemini rejected the API key. Check GEMINI_API_KEY in Netlify.'
+        ? 'Gemini rejected the API key. Check GEMINI_API_KEY in Vercel (Settings → Environment Variables).'
         : body.detail ?? 'The AI coach had a problem. Showing the built-in answer.';
   throw new CoachUnavailable(code, msg);
 }
