@@ -1,15 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../../auth/session';
-import { NutritionTodayCard } from './Nutrition';
+import { useWorkouts } from '../../workouts/store';
+import { useWorkoutHeart } from '../../workouts/hr';
+import { fmtShortDuration, workoutVolume } from '../../workouts/calc';
 import { useApp } from '../../state/store';
 import { SERVER_MODE } from '../../data/cloudSync';
 import { ScoreRing } from '../components/ScoreRing';
-import { ActivityCard, BaselineComparison, CoachCard, InsightCard, SectionHead, SleepActivityCard } from '../components/Cards';
-import { IconArrowRight, IconBook, IconMoon, IconSun } from '../components/Icons';
-import { outlook, metricComparison, TAG_LABEL } from '../../insights/engine';
-import { biggestOpportunity } from '../../insights/coach';
-import { sessionTrimp, tierLabel, tonightPlan } from '../../calc/scores';
-import { fmtClock, fmtDuration, fmtLongDate, fmtNum } from '../../calc/stats';
+import { BaselineComparison } from '../components/Cards';
+import { IconArrowRight, IconMoon } from '../components/Icons';
+import { outlook, metricComparison } from '../../insights/engine';
+import { tierLabel, tonightPlan } from '../../calc/scores';
+import { fmtClock, fmtDuration, fmtLongDate, fmtNum, toDate } from '../../calc/stats';
 
 const greeting = () => {
   const h = new Date().getHours();
@@ -19,7 +20,7 @@ const greeting = () => {
 const googleResult = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('google') : null;
 
 export function TodayScreen() {
-  const { analysis: a, setTab, setHealthView, openSheet, todayJournal } = useApp();
+  const { analysis: a, setTab, setHealthView } = useApp();
   const [needsReconnect, setNeedsReconnect] = useState(false);
   useEffect(() => {
     if (!SERVER_MODE) return;
@@ -36,7 +37,6 @@ export function TodayScreen() {
   const plan = tonightPlan(ds, a.scores);
   const rhr = metricComparison(ds, 'restingHr');
   const hrv = metricComparison(ds, 'hrv');
-  const best = r ? [...r.contributors].sort((x, y) => y.impactPct - x.impactPct)[0] : null;
 
   return (
     <div className="screen today">
@@ -45,8 +45,7 @@ export function TodayScreen() {
         <h1 className="hello__title">
           {greeting()}, {ds.profile.name}
         </h1>
-        <p className="hello__sub">Here's how you're doing today.</p>
-      </header>
+              </header>
 
       {SERVER_MODE && !ds.source.isSample && needsReconnect && (
         <section className="card connect-banner">
@@ -77,8 +76,8 @@ export function TodayScreen() {
           </a>
         </section>
       )}
-      <div className="dash">
-        <section className="card rings-card dash__rings" aria-label="FITBITRACK scores">
+      <div className="today-grid">
+        <section className="card rings-card" aria-label="FITBITRACK scores">
           <div className="rings">
             <ScoreRing
               value={r?.score ?? null}
@@ -110,14 +109,17 @@ export function TodayScreen() {
               label="Training Load"
               caption={ds.availability.exercise ? today.load.level : 'No data'}
               onClick={() => setTab('train')}
-              ariaLabel={`Training load ${today.load.score}. Open training`}
+              ariaLabel={`Training load ${today.load.score}. Open workouts`}
             />
           </div>
-          <p className="rings__note">FITBITRACK SCORES · calculated from your Fitbit data</p>
+          <p className="outlook__headline outlook__headline--sm">
+            {ol.headline}
+            {ol.highlight && <em>{ol.highlight}</em>}
+            {(ol as any).tail}
+          </p>
         </section>
 
-        <section className="card snapshot dash__snap" aria-label="Health snapshot">
-          <div className="eyebrow">Health snapshot</div>
+        <section className="card snapshot" aria-label="Health snapshot">
           <div className="snapshot__grid">
             <Snap label="Resting HR" value={td.restingHr} unit="bpm" cmp={rhr && <BaselineComparison delta={rhr.delta} unit="bpm" better="lower" suffix="" />} />
             <Snap label="HRV" value={td.hrv} unit="ms" cmp={hrv && <BaselineComparison delta={hrv.pct} pct better="higher" suffix="" />} />
@@ -126,112 +128,76 @@ export function TodayScreen() {
           </div>
         </section>
 
-        <section className="card outlook dash__outlook">
-          <div className="outlook__head">
-            <IconSun size={18} className="outlook__icon" />
-            <span className="eyebrow">Today's outlook</span>
-          </div>
-          <p className="outlook__headline">
-            {ol.headline}
-            {ol.highlight && <em>{ol.highlight}</em>}
-            {(ol as any).tail}
-          </p>
-          <p className="outlook__body">{ol.body}</p>
-          <button className="cta" onClick={() => openSheet('insights')} type="button">
-            View insights <IconArrowRight size={16} />
-          </button>
-        </section>
+        <LastWorkoutCard />
 
-        <div className="dash__coach">
-          <CoachCard
-            lead={r ? (r.score >= 80 ? "You're looking good today." : r.score >= 60 ? "You're in decent shape today." : 'Take it easier today.') : 'Let’s build your baseline.'}
-            lines={[
-              r ? (
-                <>
-                  Your readiness is <b>{r.score}/100</b>.
-                </>
-              ) : (
-                'Readiness needs HRV or resting heart rate.'
-              ),
-              best ? (
-                <>
-                  The biggest positive contributor is your <b>{best.label === 'HRV' ? 'HRV' : best.label.toLowerCase()}</b>, which is {fmtNum(Math.abs(best.impactPct))}% {best.impactPct >= 0 ? 'better than' : 'below'} your baseline.
-                </>
-              ) : null,
-              <>
-                Your biggest opportunity is <b>{biggestOpportunity(a)}</b>.
-              </>,
-            ].filter(Boolean)}
-            onAsk={() => openSheet('coach')}
-          />
-        </div>
-
-        <section className="dash__activity">
-          <SectionHead title="Today's activity" action="Train" onAction={() => setTab('train')} />
-          <div className="stack">
-            {s && <SleepActivityCard start={s.session.start} end={s.session.end} minutes={s.session.minutesAsleep} />}
-            {today.load.sessions.map((e) => (
-              <ActivityCard key={e.id} e={e} trimp={sessionTrimp(e, ds.profile.maxHr)} />
-            ))}
-            {!today.load.sessions.length && <div className="na-block">No workouts logged yet today.</div>}
-          </div>
-        </section>
-
-        <section className="card tonight dash__tonight">
+        <section className="card tonight">
           <div className="tonight__head">
             <IconMoon size={18} className="tonight__icon" />
-            <span className="eyebrow">Tonight's sleep</span>
+            <span className="eyebrow">Tonight</span>
           </div>
           <div className="tonight__row">
             <div>
               <div className="tonight__time num">{fmtClock(plan.bedMin)}</div>
-              <div className="tonight__label">Recommended bedtime</div>
+              <div className="tonight__label">Bedtime</div>
             </div>
             <span className="tonight__line" aria-hidden="true" />
             <div>
               <div className="tonight__time num">{fmtClock(plan.wakeMin)}</div>
-              <div className="tonight__label">Recommended wake</div>
+              <div className="tonight__label">Wake</div>
             </div>
           </div>
-          <p className="tonight__note">
-            Aims for {fmtDuration(plan.needMin)} of sleep, based on your goal{today.load.score >= 70 ? ", today's training" : ''} and recent nights.
-          </p>
-        </section>
-
-        <div className="dash__food">
-          <NutritionTodayCard />
-        </div>
-
-        <section className="card journal-cta dash__journal">
-          <div className="tonight__head">
-            <IconBook size={18} className="journal-cta__icon" />
-            <span className="eyebrow">Journal</span>
-          </div>
-          <p className="journal-cta__text">{todayJournal.tags.length ? 'Logged today:' : 'Log what might affect tonight’s sleep and tomorrow’s readiness.'}</p>
-          {todayJournal.tags.length > 0 && (
-            <div className="chips chips--static">
-              {todayJournal.tags.map((t) => (
-                <span key={t} className="chip is-on">
-                  {TAG_LABEL[t]}
-                </span>
-              ))}
-            </div>
-          )}
-          <button className="cta cta--ghost" onClick={() => openSheet('journal')} type="button">
-            {todayJournal.tags.length ? 'Edit journal' : 'Log today'} <IconArrowRight size={16} />
-          </button>
-        </section>
-
-        <section className="dash__insights">
-          <SectionHead title="Top insights" action="All" onAction={() => openSheet('insights')} />
-          <div className="stack">
-            {a.insights.slice(0, 3).map((i) => (
-              <InsightCard key={i.id} insight={i} />
-            ))}
-          </div>
+          <p className="tonight__note">For {fmtDuration(plan.needMin)} of sleep.</p>
         </section>
       </div>
     </div>
+  );
+}
+
+/** Latest Hevy workout with the heart rate your Fitbit measured during it. */
+function LastWorkoutCard() {
+  const { raw, setTab } = useApp();
+  const { data, openPage } = useWorkouts();
+  const w = data?.history[data.history.length - 1] ?? null;
+  const h = useWorkoutHeart(w, raw);
+  if (!w)
+    return (
+      <section className="card lastw">
+        <div className="eyebrow">Last workout</div>
+        <p className="fine">Upload your Hevy CSV in Workouts to see your sessions here with your Fitbit heart rate.</p>
+        <button className="cta cta--ghost" onClick={() => setTab('train')} type="button">
+          Go to Workouts <IconArrowRight size={16} />
+        </button>
+      </section>
+    );
+  return (
+    <button
+      className="card lastw lastw--btn"
+      onClick={() => {
+        setTab('train');
+        openPage({ kind: 'workout', id: w.id });
+      }}
+      type="button"
+    >
+      <div className="row-between">
+        <span className="eyebrow">Last workout · Hevy</span>
+        <span className="fine">{toDate(w.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+      </div>
+      <b className="lastw__name">{w.name}</b>
+      <div className="lastw__stats">
+        <span>
+          <b className="num">{fmtShortDuration(w.durationSec)}</b> time
+        </span>
+        <span>
+          <b className="num">{fmtNum(workoutVolume(w))}</b> kg
+        </span>
+        <span>
+          <b className="num">{h.avg ?? '—'}</b> avg bpm
+        </span>
+        <span>
+          <b className="num">{h.kcal ?? '—'}</b> kcal
+        </span>
+      </div>
+    </button>
   );
 }
 

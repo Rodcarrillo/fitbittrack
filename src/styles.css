@@ -129,7 +129,7 @@ p { margin: 0; }
   left: 0; right: 0; bottom: 0;
   z-index: 30;
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   padding: 8px 6px calc(8px + env(safe-area-inset-bottom, 0px));
   background: var(--glass);
   backdrop-filter: blur(18px);
@@ -1295,3 +1295,27 @@ html.is-splash, html.is-splash body { background: #fff !important; }
 .fooditem__nums label { display: flex; flex-direction: column; gap: 2px; }
 .fooditem__nums .input { padding: 8px; text-align: center; }
 .tabbar__item span { font-size: 10.5px; }
+
+/* ---------------- simplified layout (v4) ---------------- */
+.today-grid, .wk-grid { display: grid; gap: 14px; }
+@media (min-width: 900px) {
+  .today-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+  .today-grid > .rings-card { grid-column: 1 / -1; }
+  .wk-grid { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); align-items: start; }
+  .wk-grid > .wk-recent { grid-row: span 3; grid-column: 1; }
+}
+.outlook__headline--sm { font-size: 15px; text-align: center; margin: 14px 0 2px; }
+.lastw { display: flex; flex-direction: column; gap: 8px; text-align: left; width: 100%; }
+.lastw__name { font-size: 18px; }
+.lastw__stats { display: grid; grid-template-columns: repeat(4, auto); justify-content: space-between; gap: 6px; font-size: 11px; color: var(--muted); }
+.lastw__stats b { display: block; font-size: 17px; color: var(--fg); }
+.wrow { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; }
+.wrow__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.wrow__hr { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.wrow__hr svg { color: var(--bad); vertical-align: -1px; }
+.wrow__hr b { color: var(--fg); }
+.stack--tight { gap: 4px; }
+.liftrow--flat { padding: 8px 0; border-bottom: 1px solid var(--line); background: none; }
+.liftrow--flat:last-child { border-bottom: 0; }
+.fitbit-card__grid--3 { grid-template-columns: repeat(3, 1fr) !important; }
+.settings-btn.is-on { color: var(--accent); }

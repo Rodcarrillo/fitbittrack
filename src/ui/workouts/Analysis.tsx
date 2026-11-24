@@ -15,7 +15,7 @@ function Delta({ v }: { v: number | null }) {
 }
 
 /** Upload button for the Hevy CSV, always one tap away at the top of the analysis. */
-function HevyUpload() {
+export function HevyUpload() {
   const w = useWorkouts();
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const last = w.data?.lastCsvImport;
@@ -50,9 +50,6 @@ function HevyUpload() {
         </label>
       </div>
       {msg && <div className={msg.ok ? 'fine hevy-csv__ok' : 'notice'}>{msg.text}</div>}
-      <button className="link fine" onClick={() => w.openPage({ kind: 'hevy' })} type="button">
-        Have Hevy Pro? Set up automatic sync →
-      </button>
     </section>
   );
 }

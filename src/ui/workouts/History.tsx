@@ -1,3 +1,4 @@
+import { WorkoutHeartCard } from './Workouts';
 import React, { useState } from 'react';
 import { useApp } from '../../state/store';
 import { useWorkouts } from '../../workouts/store';
@@ -108,7 +109,7 @@ export function WorkoutDetail({ id }: { id: string }) {
 
   return (
     <div className="wk">
-      <BackBar title="History" onBack={() => openPage(null)} />
+      <BackBar title="Workouts" onBack={() => openPage(null)} />
       <header className="wd-head">
         <span className="eyebrow">{toDate(w.date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</span>
         <h1 className="screen__title">{w.name}</h1>
@@ -148,7 +149,7 @@ export function WorkoutDetail({ id }: { id: string }) {
         )}
       </section>
 
-      <FitbitCard w={w} />
+      <WorkoutHeartCard w={w} />
 
       {w.prs.length > 0 && (
         <section className="card prs-card">

@@ -8,7 +8,6 @@ import { explainMetric, metricComparison, type DailyKey } from '../../insights/e
 import { tierLabel } from '../../calc/scores';
 import { bedtimeMinutes, clockMinutes, dayLetter, fmtClock, fmtDuration, fmtMonthDay, fmtNum, mean, nonNull, signed } from '../../calc/stats';
 import type { MetricKey } from '../../domain/types';
-import { AgeView } from './FitbitAge';
 
 export function HealthScreen() {
   const { healthView, setHealthView } = useApp();
@@ -23,11 +22,10 @@ export function HealthScreen() {
           options={[
             { value: 'recovery', label: 'Recovery' },
             { value: 'sleep', label: 'Sleep' },
-            { value: 'age', label: 'Fitbit Age' },
           ]}
         />
       </header>
-      {healthView === 'recovery' ? <Recovery /> : healthView === 'sleep' ? <Sleep /> : <AgeView />}
+      {healthView === 'sleep' ? <Sleep /> : <Recovery />}
     </div>
   );
 }

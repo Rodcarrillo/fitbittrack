@@ -4,8 +4,7 @@ import { LoginScreen } from './ui/screens/Login';
 import { AppProvider, useApp, type Tab } from './state/store';
 import { TodayScreen } from './ui/screens/Today';
 import { HealthScreen } from './ui/screens/Health';
-import { TrainScreen } from './ui/workouts/WorkoutsTab';
-import { TrendsScreen } from './ui/screens/Trends';
+import { TrainScreen } from './ui/workouts/Workouts';
 import { ProfileScreen } from './ui/screens/Profile';
 import { Sheets } from './ui/screens/Sheets';
 import { BandIcon, Splash, Wordmark } from './ui/components/Logo';
@@ -15,17 +14,14 @@ import { SERVER_MODE } from './data/cloudSync';
 import { api } from './auth/session';
 import { WorkoutProvider, useWorkouts } from './workouts/store';
 import { ActiveWorkoutLayer } from './ui/workouts/ActiveWorkout';
-import { IconAuto, IconMoon, IconSun, IconDumbbell, IconHeart, IconProfile, IconRefresh, IconSpark, IconToday, IconTrends, IconFood } from './ui/components/Icons';
-import { NutritionScreen } from './ui/screens/Nutrition';
+import { IconDumbbell, IconHeart, IconProfile, IconRefresh, IconToday } from './ui/components/Icons';
 
 const NAV: { tab: Tab; label: string; icon: React.ReactNode }[] = [
   { tab: 'today', label: 'Today', icon: <IconToday size={22} /> },
+  { tab: 'train', label: 'Workouts', icon: <IconDumbbell size={22} /> },
   { tab: 'health', label: 'Health', icon: <IconHeart size={22} /> },
-  { tab: 'nutrition', label: 'Food', icon: <IconFood size={22} /> },
-  { tab: 'train', label: 'Train', icon: <IconDumbbell size={22} /> },
-  { tab: 'trends', label: 'Trends', icon: <IconTrends size={22} /> },
-  { tab: 'profile', label: 'Profile', icon: <IconProfile size={22} /> },
 ];
+const TABS: Tab[] = ['today', 'train', 'health', 'profile'];
 
 function usePullToRefresh(onRefresh: () => Promise<void>) {
   const [pull, setPull] = useState(0);
@@ -73,8 +69,8 @@ function usePullToRefresh(onRefresh: () => Promise<void>) {
 }
 
 function Shell() {
-  const { tab, setTab, loading, error, analysis, refresh, refreshing, openSheet, raw, theme, setTheme } = useApp();
-  const nextTheme = theme === 'auto' ? 'light' : theme === 'light' ? 'dark' : 'auto';
+  const { tab, setTab, loading, error, analysis, refresh, refreshing, openSheet, raw } = useApp();
+  const shown: Tab = TABS.includes(tab) ? tab : 'today';
   const pull = usePullToRefresh(refresh);
   const device = raw?.devices[0];
   const batteryNow = device ? estimateBattery(device)?.level ?? null : null;
@@ -106,14 +102,15 @@ function Shell() {
         </div>
         <nav className="sidebar__nav">
           {NAV.map((n) => (
-            <button key={n.tab} className={`navitem ${tab === n.tab ? 'is-active' : ''}`} onClick={() => setTab(n.tab)} aria-current={tab === n.tab ? 'page' : undefined} type="button">
+            <button key={n.tab} className={`navitem ${shown === n.tab ? 'is-active' : ''}`} onClick={() => setTab(n.tab)} aria-current={tab === n.tab ? 'page' : undefined} type="button">
               {n.icon}
               <span>{n.label}</span>
             </button>
           ))}
         </nav>
-        <button className="sidebar__coach" onClick={() => openSheet('coach')} type="button">
-          <IconSpark size={16} /> Ask FITBITRACK
+        <button className={`navitem ${tab === 'profile' ? 'is-active' : ''}`} onClick={() => setTab('profile')} type="button">
+          <IconProfile size={22} />
+          <span>Settings</span>
         </button>
         {device && (
           <button className="sidebar__device" onClick={() => openSheet('battery')} type="button">
@@ -141,11 +138,11 @@ function Shell() {
                 <BandIcon size={20} />
               </button>
             )}
-            <button className="icon-btn theme-btn" onClick={() => setTheme(nextTheme)} aria-label={`Appearance: ${theme}. Switch to ${nextTheme}`} title={`Appearance: ${theme === 'auto' ? 'Auto (device)' : theme}`} type="button">
-              {theme === 'light' ? <IconSun size={18} /> : theme === 'dark' ? <IconMoon size={18} /> : <IconAuto size={18} />}
-            </button>
             <button className={`icon-btn refresh-btn ${refreshing ? 'is-spinning' : ''}`} onClick={refresh} aria-label="Refresh data" type="button">
               <IconRefresh size={18} />
+            </button>
+            <button className={`icon-btn settings-btn ${shown === 'profile' ? 'is-on' : ''}`} onClick={() => setTab('profile')} aria-label="Settings" type="button">
+              <IconProfile size={18} />
             </button>
           </div>
         </header>
@@ -154,7 +151,7 @@ function Shell() {
           <IconRefresh size={18} className={pull >= 60 ? 'is-ready' : ''} />
         </div>
 
-        <main className="content" key={tab}>
+        <main className="content" key={shown}>
           {loading && !analysis ? (
             <Skeleton />
           ) : error ? (
@@ -166,12 +163,10 @@ function Shell() {
             </div>
           ) : (
             <>
-              {tab === 'today' && <TodayScreen />}
-              {tab === 'health' && <HealthScreen />}
-              {tab === 'train' && <TrainScreen />}
-              {tab === 'trends' && <TrendsScreen />}
-              {tab === 'nutrition' && <NutritionScreen />}
-              {tab === 'profile' && <ProfileScreen />}
+              {shown === 'today' && <TodayScreen />}
+              {shown === 'health' && <HealthScreen />}
+              {shown === 'train' && <TrainScreen />}
+              {shown === 'profile' && <ProfileScreen />}
             </>
           )}
         </main>
@@ -179,7 +174,7 @@ function Shell() {
 
       <nav className="tabbar" aria-label="Main navigation">
         {NAV.map((n) => (
-          <button key={n.tab} className={`tabbar__item ${tab === n.tab ? 'is-active' : ''}`} onClick={() => setTab(n.tab)} aria-current={tab === n.tab ? 'page' : undefined} type="button">
+          <button key={n.tab} className={`tabbar__item ${shown === n.tab ? 'is-active' : ''}`} onClick={() => setTab(n.tab)} aria-current={tab === n.tab ? 'page' : undefined} type="button">
             {n.icon}
             <span>{n.label}</span>
           </button>

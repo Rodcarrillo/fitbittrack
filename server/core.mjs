@@ -426,6 +426,15 @@ async function route(req, context) {
     return googleCall(u, 'POST', `/users/me/dataTypes/${del[1]}/dataPoints:batchDelete`, { names });
   }
 
+  /* ---------- heart rate during a time window (e.g. a Hevy workout) ---------- */
+  if (path === '/api/hr-window' && method === 'GET') {
+    const start = new Date(url.searchParams.get('start') ?? '');
+    const end = new Date(url.searchParams.get('end') ?? '');
+    const maxHr = Math.min(230, Math.max(150, Number(url.searchParams.get('maxHr')) || 190));
+    if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end <= start || end - start > 6 * 3600_000) return json({ error: 'bad_window' }, 400);
+    return json(await hrWindow(u, start, end, maxHr));
+  }
+
   /* ---------- food recognition (Gemini vision / text) ---------- */
   if (path === '/api/food/analyze' && method === 'POST') return analyzeFood(u, await readJson(req));
 
@@ -626,4 +635,67 @@ async function analyzeFood(u, body) {
     }
   }
   return json(lastErr ?? { error: 'food_failed' }, 502);
+}
+
+
+/* ---------------------------------------------------------------- heart rate in a window */
+async function hrWindow(u, start, end, maxHr) {
+  const s = start.toISOString();
+  const e = end.toISOString();
+  // two ways to ask Google for a time range; use whichever this API version accepts
+  const variants = [
+    (tok) => new URLSearchParams({ filter: `heart_rate.sample_time.physical_time >= "${s}" AND heart_rate.sample_time.physical_time < "${e}"`, pageSize: '10000', ...(tok ? { pageToken: tok } : {}) }),
+    (tok) => new URLSearchParams({ startTime: s, endTime: e, pageSize: '10000', ...(tok ? { pageToken: tok } : {}) }),
+  ];
+  let pts = null;
+  let lastStatus = 0;
+  for (const q of variants) {
+    const out = [];
+    let tok;
+    let ok = true;
+    for (let page = 0; page < 10; page++) {
+      const r = await googleCall(u, 'GET', `/users/me/dataTypes/heart-rate/dataPoints?${q(tok)}`);
+      if (!r.ok) {
+        ok = false;
+        lastStatus = r.status;
+        break;
+      }
+      const j = await r.json().catch(() => ({}));
+      for (const p of j.dataPoints ?? []) {
+        const hr = p.heartRate ?? {};
+        const t = new Date(hr.sampleTime?.physicalTime ?? hr.sampleTime?.civilTime ?? '').getTime();
+        const bpm = Number(hr.beatsPerMinute ?? hr.bpm);
+        if (Number.isFinite(t) && Number.isFinite(bpm) && bpm > 30 && bpm < 240 && t >= start.getTime() && t < end.getTime()) out.push([t, bpm]);
+      }
+      tok = j.nextPageToken;
+      if (!tok) break;
+    }
+    if (ok) {
+      pts = out;
+      break;
+    }
+    if (lastStatus !== 400) break;
+  }
+  if (!pts) return { error: lastStatus === 403 ? 'no_permission' : 'unavailable', status: lastStatus };
+  pts.sort((a, b) => a[0] - b[0]);
+  if (!pts.length) return { points: 0 };
+  const zones = { z1: 0, z2: 0, z3: 0, z4: 0, z5: 0 };
+  let sum = 0;
+  let wsum = 0;
+  let max = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const [t, bpm] = pts[i];
+    const dt = Math.min(30, i + 1 < pts.length ? (pts[i + 1][0] - t) / 1000 : 5); // seconds this reading stands for
+    sum += bpm * dt;
+    wsum += dt;
+    max = Math.max(max, bpm);
+    const pct = bpm / maxHr;
+    const z = pct >= 0.9 ? 'z5' : pct >= 0.8 ? 'z4' : pct >= 0.7 ? 'z3' : pct >= 0.6 ? 'z2' : pct >= 0.5 ? 'z1' : null;
+    if (z) zones[z] += dt / 60;
+  }
+  for (const k of Object.keys(zones)) zones[k] = Math.round(zones[k]);
+  // ~60 points for a small chart
+  const step = Math.max(1, Math.floor(pts.length / 60));
+  const series = pts.filter((_, i) => i % step === 0).map(([t, b]) => [Math.round((t - start.getTime()) / 1000), b]);
+  return { points: pts.length, avg: Math.round(sum / Math.max(1, wsum)), max, coveredMin: Math.round(wsum / 60), zones, series };
 }

@@ -382,7 +382,8 @@ function today(d) {
   };
   st2('TONIGHT', d.tonight ? d.tonight.bedtime : '—', d.tonight ? `wake ${d.tonight.wake}` : '', C.sleep);
   grid2.addSpacer(6);
-  st2('FOOD', d.food ? `${fmtK(d.food.kcal)} kcal` : '—', d.food ? `P ${d.food.protein} g · ${(d.food.waterMl / 1000).toFixed(1)} L` : '', C.warn);
+  const lw = d.training && d.training.last;
+  st2('LAST WORKOUT', lw ? lw.name : '—', lw ? `${lw.minutes} min · ${new Date(lw.date + 'T12:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : '', C.accent);
   grid2.addSpacer(6);
   st2('BAND', b ? `${b.level}%` : '—', b && b.hoursLeft != null ? fmtLeft(b.hoursLeft) : b ? b.device || '' : '', C.train);
   w.addSpacer(8);

@@ -5,7 +5,6 @@ import { generateSampleDataset } from './mockProvider';
 import type { HealthDataProvider } from './types';
 import { mapExercise, mapSleep, mergeDaily, type GHExercisePoint, type GHSleepPoint } from './googleHealthMappers';
 import { loadDailySeries } from './googleHealthDaily';
-import { loadNutrition } from '../nutrition';
 
 /**
  * Google Health API provider (the successor of the Fitbit Web API, which was turned down
@@ -80,7 +79,6 @@ export class GoogleHealthProvider implements HealthDataProvider {
           return null;
         },
       );
-    const nutritionP = loadNutrition(addDays(today, -34));
     const [profile, devices, heightRaw, sleepRaw, exerciseRaw, daily] = await Promise.all([
       track('profile', api<any>('/api/profile'), (v) => (v?.age ? `age ${v.age}` : 'ok')),
       track('devices', api<any>('/api/devices'), (v) => `${v?.pairedDevices?.length ?? 0} devices${v?.pairedDevices?.[0] ? ` · battery ${v.pairedDevices[0].batteryLevel ?? v.pairedDevices[0].batteryStatus ?? '?'}` : ''}`),
@@ -89,8 +87,7 @@ export class GoogleHealthProvider implements HealthDataProvider {
       track('exercise', listAll<GHExercisePoint>('exercise', `exercise.interval.civil_start_time >= "${start}"`), (v) => `${v.length} sessions`),
       loadDailySeries(start, today),
     ]);
-    const nutrition = await nutritionP;
-    Object.assign(diag, daily?.diag ?? {}, nutrition.diag);
+    Object.assign(diag, daily?.diag ?? {});
     const series: Record<string, Map<ISODate, number>> = (daily?.series ?? {}) as any;
 
     const sleep = sleepRaw ? mapSleep(sleepRaw) : [];
@@ -160,8 +157,6 @@ export class GoogleHealthProvider implements HealthDataProvider {
       exercises,
       journal: [],
       availability,
-      food: nutrition.food,
-      water: nutrition.water,
     };
   }
 }
