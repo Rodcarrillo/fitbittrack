@@ -1138,7 +1138,7 @@ button.prcard:hover { border-color: rgba(110, 138, 240, 0.35); }
 .sp-bell__p { opacity: 0; animation-name: spBellIn, spBellOut; animation-duration: 0.38s, 0.28s; animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1), cubic-bezier(0.55, 0, 0.45, 1); animation-fill-mode: both, forwards; }
 .sp-pulse { opacity: 0; stroke-dasharray: 1; stroke-dashoffset: 1; animation: spDraw 0.62s cubic-bezier(0.65, 0, 0.35, 1) 1.86s forwards; }
 @keyframes spFIn { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: none; } }
-@keyframes spFOut { from { opacity: 1; transform: none; filter: blur(0); } to { opacity: 0; transform: scale(0.82) skewX(-6deg); filter: blur(4px); } }
+@keyframes spFOut { from { opacity: 1; transform: none; } to { opacity: 0; transform: scale(0.88); } }
 @keyframes spBellIn { from { opacity: 0; transform: scale(0.4, 0.05); } to { opacity: 1; transform: none; } }
 @keyframes spBellOut { from { opacity: 1; transform: none; } to { opacity: 0; transform: scale(1, 0.08); } }
 @keyframes spDraw { 0% { opacity: 1; stroke-dashoffset: 1; } 100% { opacity: 1; stroke-dashoffset: 0; } }
