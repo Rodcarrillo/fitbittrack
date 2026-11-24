@@ -1127,7 +1127,7 @@ button.prcard:hover { border-color: rgba(110, 138, 240, 0.35); }
 
 /* ---------------- v3 identity: black heartbeat on white ---------------- */
 :root { --logo: #000; }
-.logomark--tile { background: #fff; border: 1px solid rgba(0, 0, 0, 0.08); box-shadow: 0 4px 14px -6px rgba(0, 0, 0, 0.45); }
+.logomark--tile { background: #fff; }
 
 /* splash: F → dumbbell → heartbeat, pure white */
 .splash { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; background: #fff; transition: opacity 0.4s ease, visibility 0.4s; }
@@ -1241,7 +1241,7 @@ button.battery { padding: 4px 2px; border-radius: 10px; }
 /* no decorative glow behind the status bar / top bar: flat, solid top on every device */
 body::before { display: none; }
 .topbar::before { content: ''; position: absolute; left: 0; right: 0; bottom: 100%; height: 200px; background: var(--bg); }
-.logomark--tile { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18); }
+.logomark--tile { box-shadow: none; border: 0; }
 
 /* splash covers the whole screen, including the area behind the home indicator / toolbars */
 .splash { inset: auto; top: 0; left: 0; right: 0; height: 100vh; height: 100lvh; min-height: 100%; padding-bottom: env(safe-area-inset-bottom, 0px); }
